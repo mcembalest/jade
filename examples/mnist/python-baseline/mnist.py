@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# ///
 
 import base64
 import json
@@ -37,7 +40,7 @@ def png_data_uri(rows: list[list[int]]) -> str:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: python3 mnist.py ..")
+        raise SystemExit("usage: uv run mnist.py ..")
     data = Path(sys.argv[1]) / "data"
     train_count, pixels, train_images = images(data / "train-images-idx3-ubyte")
     train_labels = labels(data / "train-labels-idx1-ubyte")

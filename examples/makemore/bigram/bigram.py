@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# ///
 
 import json
 import math
@@ -10,7 +13,7 @@ from pathlib import Path
 
 def main() -> None:
     if len(sys.argv) != 2:
-        raise SystemExit("usage: python3 bigram.py ../names.txt")
+        raise SystemExit("usage: uv run bigram.py ../names.txt")
 
     names = [name.strip().lower() for name in Path(sys.argv[1]).read_text().splitlines() if name.strip()]
     alphabet = [".", *sorted({character for name in names for character in name})]

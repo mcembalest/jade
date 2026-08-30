@@ -4,13 +4,16 @@ JaDE (“Just a Development Environment”) is for work, writing, visualization,
 
 ## Setup: write `jade.md`
 
-A normal directory becomes a JaDE with `jade.md`, a Markdown file optionally declaring an output artifact & a generation command, e.g.
-```markdown
+A normal directory becomes a JaDE with `jade.md` — plain Markdown, no special syntax. JaDE makes its `sh` code blocks runnable and opens its first file link in the viewer pane, e.g.
+````markdown
 # A paper
 
-Artifact: paper.pdf
-Command: typst compile paper.typ paper.pdf
+```sh
+typst compile paper.typ paper.pdf
 ```
+
+The result: [paper.pdf](paper.pdf)
+````
 ## Visualize: JaDE UI
 
 Install once (requires [Go](https://go.dev/dl/)), then launch from anywhere inside a project containing a `jade.md`:
@@ -20,7 +23,7 @@ go install github.com/mcembalest/jade@latest
 jade
 ```
 
-Open `http://127.0.0.1:7333`. The UI is a window onto one JaDE: its front page, plain-text editing, a Run button for the declared command, and the artifact beside its sources. `jade` finds the nearest `jade.md` at or above where you run it; pass a path (`jade ~/some/project`) to aim it elsewhere. It runs beside your editor, terminal, and Git — it does not replace them.
+Open `http://127.0.0.1:7333`. The UI is a window onto one JaDE: its front page, plain-text editing, a Run button for every `sh` block in `jade.md` plus a box for one-off commands, and the linked file rendered beside its sources. `jade` finds the nearest `jade.md` at or above where you run it; pass a path (`jade ~/some/project`) to aim it elsewhere. It runs beside your editor, terminal, and Git — it does not replace them.
 
 This repository is the engine and is itself a JaDE; working on the engine, run it directly against the bundled examples:
 
@@ -34,11 +37,11 @@ go run . examples/makemore
 A JaDE may contain JaDEs. Files that are used by multiple inner JaDEs should live near your outer JaDE root so that multiple inner JaDEs can use them.
 ```
 project/          
-├── jade.md       summarize project, declare artifact & generation command
+├── jade.md       front page: prose, runnable sh blocks, links to results
 ├── …             
-├── <artifact>    the generated artifact
+├── <result>      files produced by the sh blocks
 └── inner/        nested inner JaDE
-    ├── jade.md   summarize inner project, declares inner artifact & generation command
+    ├── jade.md   same idea, one level down
     └── …
 ```
 ## Sources of inspiration

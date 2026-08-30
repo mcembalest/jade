@@ -1,10 +1,12 @@
 # JaDE
 
-A directory becomes a workbench by containing `jade.md`. Edit files beside the artifact they build.
+A directory becomes a workbench by containing `jade.md` — plain Markdown. Its `sh` blocks become Run buttons; its file links open in the viewer pane.
 
-- `core.go` — markers, scoping, declarations
-- `main.go` — local UI
-- `examples/mnist/` — one problem, two languages, identical metrics
-- `examples/makemore/` — learn names, generate new ones
+- [core.go](core.go) — workspace rules
+- [main.go](main.go) — local UI
+- [examples/mnist/](examples/mnist/) — one problem, two languages, identical metrics
+- [examples/makemore/](examples/makemore/) — learn names, generate new ones
 
-Run `go run . .` and open <http://127.0.0.1:7333>.
+```sh
+go test ./...
+```

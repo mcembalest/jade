@@ -2,8 +2,8 @@
 
 The identical nearest-centroid model, written natively in Mojo via `pixi`.
 
-`mnist.mojo` reads `../data`, writes the report below and `metrics.json`. Must match the Python baseline: **0.773**.
+```sh
+../fetch.sh && pixi run mnist
+```
 
-Artifact: report.md
-
-Command: ../fetch.sh && pixi run mnist
+Results: [report.md](report.md), [metrics.json](metrics.json). Must match the Python baseline: **0.773**.

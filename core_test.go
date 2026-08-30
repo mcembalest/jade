@@ -17,31 +17,22 @@ func writeTestFile(t *testing.T, path, contents string) {
 }
 
 func TestParseJade(t *testing.T) {
-	parsed, err := ParseJade("# A paper\n\nArtifact: out/paper.pdf\nCommand: typst compile paper.typ out/paper.pdf\n")
-	if err != nil {
-		t.Fatal(err)
+	title, commands := ParseJade("# A paper\n\nProse first.\n\n```sh\ntypst compile paper.typ paper.pdf\n```\n\n```python\nprint('not runnable')\n```\n\n```bash\nmake fetch\nmake all\n```\n")
+	if title != "A paper" {
+		t.Fatalf("title = %q", title)
 	}
-	if parsed.Title != "A paper" || parsed.Artifact != "out/paper.pdf" || parsed.Command == "" {
-		t.Fatalf("unexpected declaration: %#v", parsed)
-	}
-
-	fenced, err := ParseJade("# Doc\n\n```markdown\nArtifact: fake.pdf\nCommand: make fake\n```\n\nArtifact: real.pdf\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fenced.Artifact != "real.pdf" || fenced.Command != "" {
-		t.Fatalf("fenced declarations should be ignored: %#v", fenced)
+	if len(commands) != 2 || commands[0] != "typst compile paper.typ paper.pdf" || commands[1] != "make fetch\nmake all" {
+		t.Fatalf("commands = %#v", commands)
 	}
 
-	bad := []string{
-		"# Duplicate\nArtifact: one.pdf\nArtifact: two.pdf\n",
-		"# Escape\nArtifact: ../outside.pdf\n",
-		"# Hidden command\nCommand: make\n",
+	title, commands = ParseJade("plain marker, no heading, no fences\n")
+	if title != "Untitled Jade" || len(commands) != 0 {
+		t.Fatalf("plain markdown should be a valid marker: %q %#v", title, commands)
 	}
-	for _, markdown := range bad {
-		if _, err := ParseJade(markdown); err == nil {
-			t.Fatalf("expected %q to fail", markdown)
-		}
+
+	_, commands = ParseJade("````markdown\n```sh\nnested example, not runnable\n```\n````\n")
+	if len(commands) != 0 {
+		t.Fatalf("documented sh fences should not become commands: %#v", commands)
 	}
 }
 
@@ -49,10 +40,9 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, markerName), "# Project\n")
 	writeTestFile(t, filepath.Join(root, "notes.md"), "ordinary note")
-	writeTestFile(t, filepath.Join(root, "synthetic", markerName), "# Synthetic data\nArtifact: data.csv\nCommand: printf 'x\\n1\\n' > data.csv\n")
+	writeTestFile(t, filepath.Join(root, "synthetic", markerName), "# Synthetic data\n\n```sh\nprintf 'x\\n1\\n' > data.csv\n```\n")
 	writeTestFile(t, filepath.Join(root, "synthetic", "generate.go"), "package main")
 	writeTestFile(t, filepath.Join(root, ".git", "ignored.txt"), "ignored")
-	writeTestFile(t, filepath.Join(root, ".pixi", "ignored.txt"), "ignored")
 
 	workspace, err := LoadWorkspace(root, ".")
 	if err != nil {
@@ -64,6 +54,9 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	if len(workspace.Files) != 4 {
 		t.Fatalf("outer Jade should still see ordinary files inside nested Jades: %#v", workspace.Files)
 	}
+	if len(workspace.Commands) != 0 {
+		t.Fatalf("outer Jade should not inherit nested commands: %#v", workspace.Commands)
+	}
 
 	child, err := LoadWorkspace(root, "synthetic")
 	if err != nil {
@@ -71,6 +64,9 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	}
 	if child.Parent != "." || child.Title != "Synthetic data" {
 		t.Fatalf("unexpected child: %#v", child)
+	}
+	if len(child.Commands) != 1 || child.Commands[0] != "printf 'x\\n1\\n' > data.csv" {
+		t.Fatalf("unexpected child commands: %#v", child.Commands)
 	}
 	found, err := FindJadeRoot(filepath.Join(root, "synthetic", "generate.go"))
 	want, realErr := filepath.EvalSymlinks(filepath.Join(root, "synthetic"))
@@ -106,18 +102,5 @@ func TestFilesStayInsideTheCurrentJade(t *testing.T) {
 	}
 	if err := WriteWorkspaceFile(root, ".", "linked.md", "no"); err == nil {
 		t.Fatal("expected write through a file symlink to fail")
-	}
-}
-
-func TestInvalidMarkerIsNotWritten(t *testing.T) {
-	root := t.TempDir()
-	original := "# Valid\n"
-	writeTestFile(t, filepath.Join(root, markerName), original)
-	if err := WriteWorkspaceFile(root, ".", markerName, "# Invalid\nCommand: make\n"); err == nil {
-		t.Fatal("expected invalid marker to fail")
-	}
-	contents, err := os.ReadFile(filepath.Join(root, markerName))
-	if err != nil || string(contents) != original {
-		t.Fatalf("marker changed: %q, %v", contents, err)
 	}
 }

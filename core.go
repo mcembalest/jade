@@ -21,19 +21,14 @@ const (
 
 var ignoredDirectories = map[string]bool{".git": true, ".pixi": true, "node_modules": true}
 
-type Declaration struct {
-	Title    string
-	Artifact string
-	Command  string
-}
-
 type ChildJade struct {
 	Path  string
 	Title string
 }
 
 type Workspace struct {
-	Declaration
+	Title    string
+	Commands []string
 	Path     string
 	Parent   string
 	Markdown string
@@ -41,57 +36,47 @@ type Workspace struct {
 	Children []ChildJade
 }
 
-func ParseJade(markdown string) (Declaration, error) {
-	result := Declaration{Title: "Untitled Jade"}
-	counts := map[string]int{}
+// ParseJade extracts the first top-level heading and the fenced sh blocks
+// from a jade.md. Any Markdown is a valid marker.
+func ParseJade(markdown string) (string, []string) {
+	title := "Untitled Jade"
+	titleFound := false
+	var commands []string
+	var block []string
+	inFence, capture := false, false
 	scanner := bufio.NewScanner(strings.NewReader(markdown))
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	inFence := false
 	for scanner.Scan() {
 		line := strings.TrimSuffix(scanner.Text(), "\r")
 		trimmed := strings.TrimLeft(line, " \t")
 		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
+			if inFence {
+				if capture {
+					if command := strings.TrimSpace(strings.Join(block, "\n")); command != "" {
+						commands = append(commands, command)
+					}
+				}
+				inFence, capture, block = false, false, nil
+				continue
+			}
+			language := strings.ToLower(strings.TrimSpace(strings.TrimLeft(trimmed, "`~")))
+			inFence = true
+			capture = language == "sh" || language == "bash" || language == "shell"
 			continue
 		}
 		if inFence {
+			if capture {
+				block = append(block, line)
+			}
 			continue
 		}
-		if result.Title == "Untitled Jade" && strings.HasPrefix(line, "# ") {
-			if title := strings.TrimSpace(strings.TrimPrefix(line, "# ")); title != "" {
-				result.Title = title
-			}
-		}
-		for _, field := range []string{"Artifact", "Command"} {
-			prefix := field + ":"
-			if len(line) < len(prefix) || !strings.EqualFold(line[:len(prefix)], prefix) {
-				continue
-			}
-			counts[field]++
-			if counts[field] > 1 {
-				return Declaration{}, fmt.Errorf("%s may contain at most one %s: line", markerName, field)
-			}
-			value := strings.TrimSpace(line[len(prefix):])
-			if value == "" {
-				return Declaration{}, fmt.Errorf("%s: cannot be empty", field)
-			}
-			if field == "Artifact" {
-				if err := validateRelativePath(value); err != nil {
-					return Declaration{}, fmt.Errorf("artifact: %w", err)
-				}
-				result.Artifact = filepath.ToSlash(filepath.Clean(filepath.FromSlash(value)))
-			} else {
-				result.Command = value
+		if !titleFound && strings.HasPrefix(line, "# ") {
+			if heading := strings.TrimSpace(strings.TrimPrefix(line, "# ")); heading != "" {
+				title, titleFound = heading, true
 			}
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return Declaration{}, err
-	}
-	if result.Command != "" && result.Artifact == "" {
-		return Declaration{}, errors.New("Command: requires an Artifact: in the same jade.md")
-	}
-	return result, nil
+	return title, commands
 }
 
 func validateRelativePath(path string) error {
@@ -264,10 +249,7 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, err
 	}
-	parsed, err := ParseJade(string(marker))
-	if err != nil {
-		return Workspace{}, err
-	}
+	title, commands := ParseJade(string(marker))
 	files, jadeDirectories, err := scanWorkspace(currentRoot)
 	if err != nil {
 		return Workspace{}, err
@@ -278,13 +260,10 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 		if readErr != nil {
 			return Workspace{}, readErr
 		}
-		child, parseErr := ParseJade(string(contents))
-		if parseErr != nil {
-			return Workspace{}, fmt.Errorf("%s: %w", path, parseErr)
-		}
+		childTitle, _ := ParseJade(string(contents))
 		children = append(children, ChildJade{
 			Path:  relativeSlash(root, filepath.Join(currentRoot, filepath.FromSlash(path))),
-			Title: child.Title,
+			Title: childTitle,
 		})
 	}
 	sort.Slice(files, func(i, j int) bool {
@@ -298,12 +277,13 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 	})
 	sort.Slice(children, func(i, j int) bool { return children[i].Path < children[j].Path })
 	return Workspace{
-		Declaration: parsed,
-		Path:        relativeSlash(root, currentRoot),
-		Parent:      parentJade(root, currentRoot),
-		Markdown:    string(marker),
-		Files:       files,
-		Children:    children,
+		Title:    title,
+		Commands: commands,
+		Path:     relativeSlash(root, currentRoot),
+		Parent:   parentJade(root, currentRoot),
+		Markdown: string(marker),
+		Files:    files,
+		Children: children,
 	}, nil
 }
 
@@ -371,11 +351,6 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 	if err != nil || !within(currentRoot, actualAncestor) {
 		return errors.New("file leaves its Jade")
 	}
-	if filepath.Base(candidate) == markerName {
-		if _, err := ParseJade(contents); err != nil {
-			return err
-		}
-	}
 	if info, lstatErr := os.Lstat(candidate); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("refusing to write through a symlink")
 	}
@@ -383,27 +358,4 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 		return err
 	}
 	return os.WriteFile(candidate, []byte(contents), 0o644)
-}
-
-func ArtifactFile(runtimeRoot, jadePath string) (string, error) {
-	workspace, err := LoadWorkspace(runtimeRoot, jadePath)
-	if err != nil {
-		return "", err
-	}
-	if workspace.Artifact == "" {
-		return "", errors.New("this Jade does not declare an artifact")
-	}
-	return existingFile(runtimeRoot, jadePath, workspace.Artifact)
-}
-
-func CommandFor(runtimeRoot, jadePath string) (string, string, error) {
-	workspace, err := LoadWorkspace(runtimeRoot, jadePath)
-	if err != nil {
-		return "", "", err
-	}
-	if workspace.Command == "" {
-		return "", "", errors.New("this Jade does not declare a command")
-	}
-	cwd, err := jadeDirectory(runtimeRoot, jadePath)
-	return workspace.Command, cwd, err
 }

@@ -20,25 +20,34 @@ import (
 	"time"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	gmtext "github.com/yuin/goldmark/text"
 )
 
 const commandTimeout = 10 * time.Minute
 
+type runnable struct {
+	Command string
+	Label   string
+}
+
 type pageData struct {
-	Workspace      Workspace
-	Selected       string
-	Contents       string
-	ArtifactExists bool
-	FrontURL       string
-	ArtifactURL    string
-	CommandOutput  string
-	CommandFailed  bool
-	Problem        string
+	Workspace     Workspace
+	Selected      string
+	Contents      string
+	Runnables     []runnable
+	View          string
+	ViewURL       string
+	FrontURL      string
+	CommandOutput string
+	CommandFailed bool
+	Problem       string
 }
 
 type app struct {
 	root     string
+	realRoot string
 	markdown goldmark.Markdown
 	page     *template.Template
 	hosts    map[string]bool
@@ -69,13 +78,14 @@ const pageTemplate = `<!doctype html>
     .front { width: 100%; height: 12rem; border: 0; border-top: 1px solid #e0e4e1; }
     .controls { margin-bottom: .75rem; }
     .controls form { display: inline-flex; gap: .4rem; }
+    .controls input[name=command] { min-width: 18rem; font-family: ui-monospace, monospace; }
     .new-file { margin-left: auto; }
     .workbench { display: grid; grid-template-columns: minmax(20rem, 1fr) minmax(20rem, 1fr); gap: 1rem; min-height: 62vh; }
     .pane { display: flex; min-width: 0; flex-direction: column; border: 1px solid #cbd2cd; background: white; }
     .pane h2 { margin: 0; padding: .55rem .7rem; border-bottom: 1px solid #e0e4e1; font-size: .9rem; }
     textarea { width: 100%; min-height: 55vh; flex: 1; resize: vertical; border: 0; padding: .8rem; outline: none; tab-size: 2; font: 14px/1.5 ui-monospace, monospace; }
     .save { padding: .6rem; border-top: 1px solid #e0e4e1; }
-    .artifact { width: 100%; min-height: 58vh; flex: 1; border: 0; }
+    .viewer { width: 100%; min-height: 58vh; flex: 1; border: 0; }
     .empty { margin: auto; color: #68716b; }
     @media (max-width: 850px) { .workbench { grid-template-columns: 1fr; } nav { margin-left: 0; width: 100%; } }
   </style>
@@ -92,13 +102,14 @@ const pageTemplate = `<!doctype html>
   <main>
     {{if .Problem}}<pre class="problem">{{.Problem}}</pre>{{end}}
     <details open>
-      <summary>{{.Workspace.Title}} — {{if .Workspace.Artifact}}artifact: {{.Workspace.Artifact}}{{else}}no artifact declared{{end}}</summary>
-      <iframe class="front" sandbox src="{{.FrontURL}}" title="Jade front page"></iframe>
+      <summary>{{.Workspace.Title}}</summary>
+      <iframe class="front" sandbox="allow-top-navigation-by-user-activation" src="{{.FrontURL}}" title="Jade front page"></iframe>
     </details>
 
     <div class="controls">
       <form method="get" action="/">
         <input type="hidden" name="jade" value="{{.Workspace.Path}}">
+        <input type="hidden" name="view" value="{{.View}}">
         <label>File
           <select name="file">
             {{range .Workspace.Files}}<option value="{{.}}" {{if eq . $.Selected}}selected{{end}}>{{.}}</option>{{end}}
@@ -106,13 +117,22 @@ const pageTemplate = `<!doctype html>
         </label>
         <button type="submit">Open</button>
       </form>
-      {{if .Workspace.Command}}
+      {{range .Runnables}}
+      <form method="post" action="/run">
+        <input type="hidden" name="jade" value="{{$.Workspace.Path}}">
+        <input type="hidden" name="file" value="{{$.Selected}}">
+        <input type="hidden" name="view" value="{{$.View}}">
+        <input type="hidden" name="command" value="{{.Command}}">
+        <button type="submit" title="{{.Command}}">Run: {{.Label}}</button>
+      </form>
+      {{end}}
       <form method="post" action="/run">
         <input type="hidden" name="jade" value="{{.Workspace.Path}}">
         <input type="hidden" name="file" value="{{.Selected}}">
-        <button type="submit">Run: {{.Workspace.Command}}</button>
+        <input type="hidden" name="view" value="{{.View}}">
+        <input name="command" placeholder="sh command in this Jade" aria-label="Command">
+        <button type="submit">Run</button>
       </form>
-      {{end}}
       <form class="new-file" method="post" action="/new">
         <input type="hidden" name="jade" value="{{.Workspace.Path}}">
         <input name="path" required placeholder="new/file.md" aria-label="New file path">
@@ -127,20 +147,55 @@ const pageTemplate = `<!doctype html>
         <h2>{{.Selected}}</h2>
         <input type="hidden" name="jade" value="{{.Workspace.Path}}">
         <input type="hidden" name="file" value="{{.Selected}}">
+        <input type="hidden" name="view" value="{{.View}}">
         <textarea name="content" spellcheck="false">{{.Contents}}</textarea>
         <div class="save"><button type="submit">Save</button></div>
       </form>
       <section class="pane">
-        <h2>{{if .Workspace.Artifact}}{{.Workspace.Artifact}}{{else}}Artifact{{end}}</h2>
-        {{if .ArtifactExists}}<iframe class="artifact" sandbox src="{{.ArtifactURL}}" title="Artifact"></iframe>{{else}}<p class="empty">{{if .Workspace.Artifact}}Run the declared command to produce the artifact.{{else}}Add an Artifact: line to jade.md.{{end}}</p>{{end}}
+        <h2>{{if .View}}{{.View}}{{else}}View{{end}}</h2>
+        {{if .ViewURL}}<iframe class="viewer" sandbox="allow-top-navigation-by-user-activation" src="{{.ViewURL}}" title="Viewed file"></iframe>{{else}}<p class="empty">Link a file in jade.md to open it here.</p>{{end}}
       </section>
     </div>
   </main>
+  <script src="/app.js" defer></script>
 </body>
 </html>`
 
+const appScript = `document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+    const form = document.querySelector("form.pane");
+    if (form) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  }
+});
+const editor = document.querySelector("textarea[name=content]");
+if (editor) {
+  editor.addEventListener("keydown", (event) => {
+    if (event.key === "Tab" && !event.shiftKey) {
+      event.preventDefault();
+      editor.setRangeText("\t", editor.selectionStart, editor.selectionEnd, "end");
+    }
+  });
+  const key = "jade-cursor:" + location.search;
+  const saved = sessionStorage.getItem(key);
+  if (saved !== null) {
+    const position = Math.min(Number(saved), editor.value.length);
+    editor.setSelectionRange(position, position);
+  }
+  editor.form.addEventListener("submit", () => {
+    sessionStorage.setItem(key, String(editor.selectionStart));
+  });
+}
+`
+
 func newApp(root string, port int) (*app, error) {
 	page, err := template.New("page").Parse(pageTemplate)
+	if err != nil {
+		return nil, err
+	}
+	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +204,7 @@ func newApp(root string, port int) (*app, error) {
 		hosts[net.JoinHostPort(host, strconv.Itoa(port))] = true
 	}
 	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Typographer))
-	return &app{root: root, markdown: markdown, page: page, hosts: hosts}, nil
+	return &app{root: root, realRoot: realRoot, markdown: markdown, page: page, hosts: hosts}, nil
 }
 
 func (a *app) guard(next http.HandlerFunc) http.HandlerFunc {
@@ -179,8 +234,14 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/new", a.guard(a.create))
 	mux.HandleFunc("/run", a.guard(a.run))
 	mux.HandleFunc("/front", a.guard(a.front))
-	mux.HandleFunc("/artifact", a.guard(a.artifact))
+	mux.HandleFunc("/view", a.guard(a.view))
+	mux.HandleFunc("/app.js", a.guard(a.script))
 	return mux
+}
+
+func (a *app) script(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	_, _ = io.WriteString(response, appScript)
 }
 
 func queryPath(request *http.Request, name, fallback string) string {
@@ -190,7 +251,104 @@ func queryPath(request *http.Request, name, fallback string) string {
 	return fallback
 }
 
-func (a *app) pageData(jadePath, selected string) (pageData, error) {
+func externalDestination(destination string) bool {
+	return destination == "" ||
+		strings.Contains(destination, "://") ||
+		strings.HasPrefix(destination, "#") ||
+		strings.HasPrefix(destination, "/") ||
+		strings.HasPrefix(destination, "mailto:") ||
+		strings.HasPrefix(destination, "data:")
+}
+
+// rewriteDestination maps a relative Markdown destination onto the app:
+// a nested Jade directory becomes a Jade link, an existing file opens in the
+// viewer pane, and images load through /view. Everything else is untouched.
+func (a *app) rewriteDestination(jadePath string, destination []byte, isImage bool) []byte {
+	dest := string(destination)
+	if externalDestination(dest) {
+		return destination
+	}
+	clean := strings.TrimSuffix(dest, "/")
+	resolved, err := existingFile(a.root, jadePath, clean)
+	if err != nil {
+		return destination
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return destination
+	}
+	query := template.URLQueryEscaper
+	if info.IsDir() {
+		if marker, markerErr := os.Stat(filepath.Join(resolved, markerName)); markerErr == nil && marker.Mode().IsRegular() {
+			return []byte("/?jade=" + query(relativeSlash(a.realRoot, resolved)))
+		}
+		return destination
+	}
+	rel := filepath.ToSlash(filepath.Clean(clean))
+	if isImage {
+		return []byte("/view?jade=" + query(jadePath) + "&file=" + query(rel))
+	}
+	return []byte("/?jade=" + query(jadePath) + "&view=" + query(rel))
+}
+
+func (a *app) rewriteDestinations(jadePath string, document ast.Node) {
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch typed := node.(type) {
+		case *ast.Link:
+			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, false)
+		case *ast.Image:
+			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, true)
+		}
+		return ast.WalkContinue, nil
+	})
+}
+
+// defaultView returns the first link in jade.md that resolves to a regular
+// file inside the Jade — a convention, not a contract.
+func (a *app) defaultView(workspace Workspace) string {
+	source := []byte(workspace.Markdown)
+	document := a.markdown.Parser().Parse(gmtext.NewReader(source))
+	view := ""
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		link, ok := node.(*ast.Link)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		dest := string(link.Destination)
+		if externalDestination(dest) {
+			return ast.WalkContinue, nil
+		}
+		resolved, err := existingFile(a.root, workspace.Path, strings.TrimSuffix(dest, "/"))
+		if err != nil {
+			return ast.WalkContinue, nil
+		}
+		if info, statErr := os.Stat(resolved); statErr == nil && info.Mode().IsRegular() {
+			view = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(dest, "/")))
+			return ast.WalkStop, nil
+		}
+		return ast.WalkContinue, nil
+	})
+	return view
+}
+
+func commandLabel(command string) string {
+	label := command
+	if index := strings.IndexByte(label, '\n'); index >= 0 {
+		label = label[:index] + " …"
+	}
+	if runes := []rune(label); len(runes) > 80 {
+		label = string(runes[:77]) + "…"
+	}
+	return label
+}
+
+func (a *app) pageData(jadePath, selected, view string) (pageData, error) {
 	workspace, err := LoadWorkspace(a.root, jadePath)
 	if err != nil {
 		return pageData{}, err
@@ -202,19 +360,34 @@ func (a *app) pageData(jadePath, selected string) (pageData, error) {
 	if err != nil {
 		return pageData{}, err
 	}
-	_, artifactErr := ArtifactFile(a.root, workspace.Path)
-	return pageData{
-		Workspace:      workspace,
-		Selected:       selected,
-		Contents:       contents,
-		ArtifactExists: artifactErr == nil,
-		FrontURL:       "/front?jade=" + template.URLQueryEscaper(workspace.Path),
-		ArtifactURL:    "/artifact?jade=" + template.URLQueryEscaper(workspace.Path),
-	}, nil
+	runnables := make([]runnable, 0, len(workspace.Commands))
+	for _, command := range workspace.Commands {
+		runnables = append(runnables, runnable{Command: command, Label: commandLabel(command)})
+	}
+	if view != "" {
+		if _, viewErr := existingFile(a.root, workspace.Path, view); viewErr != nil {
+			view = ""
+		}
+	}
+	if view == "" {
+		view = a.defaultView(workspace)
+	}
+	data := pageData{
+		Workspace: workspace,
+		Selected:  selected,
+		Contents:  contents,
+		Runnables: runnables,
+		View:      view,
+		FrontURL:  "/front?jade=" + template.URLQueryEscaper(workspace.Path),
+	}
+	if view != "" {
+		data.ViewURL = "/view?jade=" + template.URLQueryEscaper(workspace.Path) + "&file=" + template.URLQueryEscaper(view)
+	}
+	return data, nil
 }
 
-func (a *app) renderPage(response http.ResponseWriter, jadePath, selected string, update func(*pageData)) {
-	data, err := a.pageData(jadePath, selected)
+func (a *app) renderPage(response http.ResponseWriter, jadePath, selected, view string, update func(*pageData)) {
+	data, err := a.pageData(jadePath, selected, view)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
@@ -235,7 +408,7 @@ func (a *app) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	a.renderPage(response, queryPath(request, "jade", "."), queryPath(request, "file", markerName), nil)
+	a.renderPage(response, queryPath(request, "jade", "."), queryPath(request, "file", markerName), request.URL.Query().Get("view"), nil)
 }
 
 func parseForm(response http.ResponseWriter, request *http.Request) bool {
@@ -247,8 +420,11 @@ func parseForm(response http.ResponseWriter, request *http.Request) bool {
 	return true
 }
 
-func redirectToFile(response http.ResponseWriter, request *http.Request, jadePath, filePath string) {
+func redirectToFile(response http.ResponseWriter, request *http.Request, jadePath, filePath, view string) {
 	location := "/?jade=" + template.URLQueryEscaper(jadePath) + "&file=" + template.URLQueryEscaper(filePath)
+	if view != "" {
+		location += "&view=" + template.URLQueryEscaper(view)
+	}
 	http.Redirect(response, request, location, http.StatusSeeOther)
 }
 
@@ -256,12 +432,12 @@ func (a *app) save(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost || !parseForm(response, request) {
 		return
 	}
-	jadePath, filePath := request.FormValue("jade"), request.FormValue("file")
+	jadePath, filePath, view := request.FormValue("jade"), request.FormValue("file"), request.FormValue("view")
 	if err := WriteWorkspaceFile(a.root, jadePath, filePath, request.FormValue("content")); err != nil {
-		a.renderPage(response, jadePath, filePath, func(data *pageData) { data.Problem = err.Error() })
+		a.renderPage(response, jadePath, filePath, view, func(data *pageData) { data.Problem = err.Error() })
 		return
 	}
-	redirectToFile(response, request, jadePath, filePath)
+	redirectToFile(response, request, jadePath, filePath, view)
 }
 
 func (a *app) create(response http.ResponseWriter, request *http.Request) {
@@ -290,18 +466,22 @@ func (a *app) create(response http.ResponseWriter, request *http.Request) {
 		err = WriteWorkspaceFile(a.root, jadePath, filePath, contents)
 	}
 	if err != nil {
-		a.renderPage(response, jadePath, markerName, func(data *pageData) { data.Problem = err.Error() })
+		a.renderPage(response, jadePath, markerName, "", func(data *pageData) { data.Problem = err.Error() })
 		return
 	}
-	redirectToFile(response, request, jadePath, filePath)
+	redirectToFile(response, request, jadePath, filePath, "")
 }
 
 func (a *app) run(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodPost || !parseForm(response, request) {
 		return
 	}
-	jadePath, selected := request.FormValue("jade"), request.FormValue("file")
-	command, cwd, err := CommandFor(a.root, jadePath)
+	jadePath, selected, view := request.FormValue("jade"), request.FormValue("file"), request.FormValue("view")
+	command := strings.TrimSpace(request.FormValue("command"))
+	cwd, err := jadeDirectory(a.root, jadePath)
+	if err == nil && command == "" {
+		err = errors.New("command is empty")
+	}
 	output := []byte(nil)
 	if err == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
@@ -318,7 +498,7 @@ func (a *app) run(response http.ResponseWriter, request *http.Request) {
 			err = fmt.Errorf("command timed out after %s", commandTimeout)
 		}
 	}
-	a.renderPage(response, jadePath, selected, func(data *pageData) {
+	a.renderPage(response, jadePath, selected, view, func(data *pageData) {
 		data.CommandOutput = string(output)
 		if data.CommandOutput == "" && err == nil {
 			data.CommandOutput = "Command completed."
@@ -330,16 +510,18 @@ func (a *app) run(response http.ResponseWriter, request *http.Request) {
 	})
 }
 
-func (a *app) renderMarkdown(response http.ResponseWriter, markdown []byte) {
+func (a *app) renderMarkdown(response http.ResponseWriter, jadePath string, markdown []byte) {
+	document := a.markdown.Parser().Parse(gmtext.NewReader(markdown))
+	a.rewriteDestinations(jadePath, document)
 	var rendered bytes.Buffer
-	if err := a.markdown.Convert(markdown, &rendered); err != nil {
+	if err := a.markdown.Renderer().Render(&rendered, markdown, document); err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
-	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><style>body{margin:1rem;color:#17201b;font:15px/1.5 system-ui,sans-serif}pre,code{font-family:ui-monospace,monospace}a{color:#145c3b}img{max-width:100%}table{border-collapse:collapse;margin:.8rem 0}th,td{border:1px solid #cbd2cd;padding:.3rem .6rem}</style>`)
+	response.Header().Set("Content-Security-Policy", "sandbox allow-top-navigation-by-user-activation; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
+	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><base target="_parent"><style>body{margin:1rem;color:#17201b;font:15px/1.5 system-ui,sans-serif}pre,code{font-family:ui-monospace,monospace}a{color:#145c3b}img{max-width:100%}table{border-collapse:collapse;margin:.8rem 0}th,td{border:1px solid #cbd2cd;padding:.3rem .6rem}</style>`)
 	_, _ = response.Write(rendered.Bytes())
 }
 
@@ -349,26 +531,32 @@ func (a *app) front(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	a.renderMarkdown(response, []byte(workspace.Markdown))
+	a.renderMarkdown(response, workspace.Path, []byte(workspace.Markdown))
 }
 
-func (a *app) artifact(response http.ResponseWriter, request *http.Request) {
-	path, err := ArtifactFile(a.root, queryPath(request, "jade", "."))
+func (a *app) view(response http.ResponseWriter, request *http.Request) {
+	jadePath := queryPath(request, "jade", ".")
+	filePath := request.URL.Query().Get("file")
+	if filePath == "" {
+		http.Error(response, "file is required", http.StatusBadRequest)
+		return
+	}
+	path, err := existingFile(a.root, jadePath, filePath)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusNotFound)
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")
-	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
 	if strings.EqualFold(filepath.Ext(path), ".md") {
 		contents, readErr := os.ReadFile(path)
 		if readErr != nil {
 			http.Error(response, readErr.Error(), http.StatusInternalServerError)
 			return
 		}
-		a.renderMarkdown(response, contents)
+		a.renderMarkdown(response, jadePath, contents)
 		return
 	}
+	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
 	if kind := mime.TypeByExtension(filepath.Ext(path)); kind != "" {
 		response.Header().Set("Content-Type", kind)
 	}
