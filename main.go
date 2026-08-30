@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
 )
 
 const commandTimeout = 10 * time.Minute
@@ -147,7 +148,8 @@ func newApp(root string, port int) (*app, error) {
 	for _, host := range []string{"127.0.0.1", "localhost", "::1"} {
 		hosts[net.JoinHostPort(host, strconv.Itoa(port))] = true
 	}
-	return &app{root: root, markdown: goldmark.New(), page: page, hosts: hosts}, nil
+	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Typographer))
+	return &app{root: root, markdown: markdown, page: page, hosts: hosts}, nil
 }
 
 func (a *app) guard(next http.HandlerFunc) http.HandlerFunc {

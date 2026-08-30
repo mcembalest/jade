@@ -1,5 +1,9 @@
 # MNIST inference
 
-The shared problem lives here: infer one digit from 28×28 grayscale bytes. The raw dataset and contract are independent of the language used to implement them.
+One shared problem — classify 28×28 grayscale digits — solved twice against the same data.
 
-Run `./fetch.sh` once to download the canonical IDX files into `data/`. The Python and Mojo implementations are nested Jades with their own code, environments, models, and metrics.
+- `data/` — canonical IDX files; `./fetch.sh` downloads them once (52 MB)
+- `python-baseline/` — nearest-centroid, Python standard library
+- `mojo-max/` — the same model, native Mojo
+
+The two implementations must agree exactly: **773 / 1000 correct**.

@@ -1,6 +1,9 @@
-# Vanilla Python baseline
+# Python baseline
 
-A nearest-centroid MNIST classifier written with the Python standard library. It learns one average image per digit and evaluates the shared test set.
+Nearest-centroid, standard library only: average one image per digit, closest centroid wins.
+
+`mnist.py` reads `../data`, writes `model.json` and the metrics. Expected accuracy: **0.773**.
 
 Artifact: metrics.json
+
 Command: ../fetch.sh && python3 mnist.py ..

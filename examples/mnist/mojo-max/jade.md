@@ -1,6 +1,9 @@
-# Native Mojo experiment
+# Mojo experiment
 
-The same nearest-centroid classifier implemented natively in Mojo against the same outer IDX files.
+The identical nearest-centroid model, written natively in Mojo via `pixi`.
+
+`mnist.mojo` reads `../data`, writes the metrics. Must match the Python baseline: **0.773**.
 
 Artifact: metrics.json
+
 Command: ../fetch.sh && pixi run mnist
