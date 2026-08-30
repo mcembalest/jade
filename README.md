@@ -23,6 +23,8 @@ go install github.com/mcembalest/jade@latest
 jade
 ```
 
+(`go install` places the binary in `$(go env GOPATH)/bin`, usually `~/go/bin` — ensure that is on your `PATH`.)
+
 Open `http://127.0.0.1:7333`. The UI is a window onto one JaDE: its front page, plain-text editing, a Run button for every `sh` block in `jade.md` plus a box for one-off commands, and the linked file rendered beside its sources. `jade` finds the nearest `jade.md` at or above where you run it; pass a path (`jade ~/some/project`) to aim it elsewhere. It runs beside your editor, terminal, and Git — it does not replace them.
 
 This repository is the engine and is itself a JaDE; working on the engine, run it directly against the bundled examples:
