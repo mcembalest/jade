@@ -339,7 +339,7 @@ func (a *app) renderMarkdown(response http.ResponseWriter, markdown []byte) {
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><style>body{margin:1rem;color:#17201b;font:15px/1.5 system-ui,sans-serif}pre,code{font-family:ui-monospace,monospace}a{color:#145c3b}</style>`)
+	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><style>body{margin:1rem;color:#17201b;font:15px/1.5 system-ui,sans-serif}pre,code{font-family:ui-monospace,monospace}a{color:#145c3b}img{max-width:100%}table{border-collapse:collapse;margin:.8rem 0}th,td{border:1px solid #cbd2cd;padding:.3rem .6rem}</style>`)
 	_, _ = response.Write(rendered.Bytes())
 }
 

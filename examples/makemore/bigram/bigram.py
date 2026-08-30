@@ -52,16 +52,17 @@ def main() -> None:
             name += character
         generated.append(name or "(empty)")
 
-    report = [
-        "BIGRAM MAKEMORE",
-        f"training names: {len(names)}",
-        f"character pairs: {pairs}",
-        f"mean negative log likelihood: {loss / pairs:.4f}",
+    Path("samples.md").write_text("\n".join([
+        "# Bigram samples",
         "",
-        *generated,
+        f"Trained on **{len(names):,}** names ({pairs:,} character pairs). "
+        f"Mean negative log likelihood: **{loss / pairs:.4f}**.",
         "",
-    ]
-    Path("samples.txt").write_text("\n".join(report))
+        "| # | sampled name |",
+        "|--:|:--|",
+        *(f"| {index + 1} | {name} |" for index, name in enumerate(generated)),
+        "",
+    ]))
 
 
 if __name__ == "__main__":

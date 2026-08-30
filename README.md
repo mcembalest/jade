@@ -12,10 +12,22 @@ Artifact: paper.pdf
 Command: typst compile paper.typ paper.pdf
 ```
 ## Visualize: JaDE UI
+
+Install once (requires [Go](https://go.dev/dl/)), then launch from anywhere inside a project containing a `jade.md`:
+
 ```sh
-go run . /path/to/a/jade
+go install github.com/mcembalest/jade@latest
+jade
 ```
-Open `http://127.0.0.1:7333`. 
+
+Open `http://127.0.0.1:7333`. The UI is a window onto one JaDE: its front page, plain-text editing, a Run button for the declared command, and the artifact beside its sources. `jade` finds the nearest `jade.md` at or above where you run it; pass a path (`jade ~/some/project`) to aim it elsewhere. It runs beside your editor, terminal, and Git — it does not replace them.
+
+This repository is the engine and is itself a JaDE; working on the engine, run it directly against the bundled examples:
+
+```sh
+go run . examples/makemore
+```
+
 
 ## Design principle: nested development environments
 

@@ -77,4 +77,9 @@ def main() raises:
     )
     with open("metrics.json", "w") as file:
         file.write(report)
+    var table = String(
+        t'# Mojo experiment — nearest centroid\n\n| training images | test images | correct | accuracy |\n|--:|--:|--:|--:|\n| {train_limit} | {test_limit} | {correct} | **{accuracy}** |\n\nMust match the Python baseline exactly.\n'
+    )
+    with open("report.md", "w") as file:
+        file.write(table)
     print("accuracy:", accuracy)

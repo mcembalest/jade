@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
+import base64
 import json
 import os
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 
@@ -21,6 +23,16 @@ def labels(path: Path) -> memoryview:
     if magic != 2049 or len(data) != 8 + count:
         raise ValueError(f"invalid MNIST label file: {path}")
     return memoryview(data)[8:]
+
+
+def png_data_uri(rows: list[list[int]]) -> str:
+    def chunk(tag: bytes, payload: bytes) -> bytes:
+        return struct.pack(">I", len(payload)) + tag + payload + struct.pack(">I", zlib.crc32(tag + payload))
+
+    header = struct.pack(">IIBBBBB", len(rows[0]), len(rows), 8, 0, 0, 0, 0)
+    raw = b"".join(b"\x00" + bytes(row) for row in rows)
+    png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
+    return "data:image/png;base64," + base64.b64encode(png).decode()
 
 
 def main() -> None:
@@ -70,6 +82,29 @@ def main() -> None:
         "correct": correct,
         "accuracy": correct / test_limit,
     }, indent=2) + "\n")
+
+    side = int(pixels ** 0.5)
+    scale = 4
+    grid: list[list[int]] = []
+    for y in range(side):
+        row: list[int] = []
+        for digit in range(10):
+            for x in range(side):
+                row.extend([255 - min(255, round(centroids[digit][y * side + x]))] * scale)
+        grid.extend([row] * scale)
+
+    Path("report.md").write_text("\n".join([
+        "# Python baseline — nearest centroid",
+        "",
+        "| training images | test images | correct | accuracy |",
+        "|--:|--:|--:|--:|",
+        f"| {train_limit:,} | {test_limit:,} | {correct:,} | **{correct / test_limit:.3f}** |",
+        "",
+        "The whole model — one average image per digit:",
+        "",
+        f"![digit centroids]({png_data_uri(grid)})",
+        "",
+    ]))
 
 
 if __name__ == "__main__":

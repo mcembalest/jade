@@ -1,5 +1,7 @@
 /data/
 /python-baseline/model.json
 /python-baseline/metrics.json
+/python-baseline/report.md
 /mojo-max/.pixi/
 /mojo-max/metrics.json
+/mojo-max/report.md
