@@ -17,9 +17,12 @@ func main() {
 	if *root == "" {
 		log.Fatal("-root is required")
 	}
-	_, portText, err := net.SplitHostPort(*address)
+	host, portText, err := net.SplitHostPort(*address)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		log.Fatal("-address must bind a loopback IP")
 	}
 	port, err := strconv.Atoi(portText)
 	if err != nil {

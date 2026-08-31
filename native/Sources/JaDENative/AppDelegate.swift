@@ -83,11 +83,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(nil)
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let workspace = windowController?.contentViewController as? WorkspaceViewController else {
+            return .terminateNow
+        }
+        workspace.flushEditor {
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     private func openWorkspace(_ selected: URL) {
         let root = workspaceRoot(selected)
         currentRoot = root
         reopenItem?.isEnabled = true
         statusItem?.button?.toolTip = "JaDE — \(root.lastPathComponent)"
+        if let workspace = windowController?.contentViewController as? WorkspaceViewController {
+            workspace.flushEditor { [weak self] in
+                self?.closeWorkspaceAndStart(root: root)
+            }
+        } else {
+            closeWorkspaceAndStart(root: root)
+        }
+    }
+
+    private func closeWorkspaceAndStart(root: URL) {
         windowController?.close()
         windowController = nil
         engine.start(root: root) { [weak self] result in

@@ -47,6 +47,7 @@ final class EngineProcess {
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
         guard attempts > 0 else {
+            stop()
             completion(.failure(NSError(domain: "JaDE", code: 1, userInfo: [NSLocalizedDescriptionKey: "The Go engine did not become ready."])))
             return
         }

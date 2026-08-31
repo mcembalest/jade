@@ -198,19 +198,28 @@ const appScript = `(() => {
     if (position === 0) editor.scrollTop = 0;
   }
 
-  async function save() {
-    if (!dirty) return true;
+  let saving = null;
+
+  async function performSave() {
     status.textContent = "Saving…";
+    const snapshot = editor.value;
     const response = await fetch("/save", {method:"POST", body:new FormData(form)});
     if (!response.ok) { status.textContent = await response.text(); return false; }
     const data = await response.json();
     rememberCursor();
-    setDirty(false);
+    if (editor.value === snapshot) setDirty(false);
     if (data.viewURL && fileInput.value === "jade.md") {
       viewFrame.src = data.viewURL;
       viewName.textContent = data.view || body.dataset.jade;
     }
     return true;
+  }
+
+  async function save() {
+    while (saving) await saving;
+    if (!dirty) return true;
+    saving = performSave();
+    try { return await saving; } finally { saving = null; }
   }
 
   async function openFile(link) {
@@ -244,7 +253,13 @@ const appScript = `(() => {
   });
   restoreCursor();
   editor.focus();
-  editor.addEventListener("input", () => setDirty(true));
+  let autosaveTimer = 0;
+  editor.addEventListener("input", () => {
+    setDirty(true);
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(save, 800);
+  });
+  window.__jadeFlush = () => { clearTimeout(autosaveTimer); return save(); };
   editor.addEventListener("keydown", event => {
     if (event.key === "Tab" && !event.shiftKey) {
       event.preventDefault();

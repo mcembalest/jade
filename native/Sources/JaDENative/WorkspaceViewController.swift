@@ -58,6 +58,26 @@ final class WorkspaceViewController: NSViewController, WKScriptMessageHandler {
         terminalView?.fitToSize()
     }
 
+    func flushEditor(completion: @escaping () -> Void) {
+        guard let webView, !webView.isLoading else {
+            completion()
+            return
+        }
+        var finished = false
+        let finish = {
+            if !finished {
+                finished = true
+                completion()
+            }
+        }
+        webView.callAsyncJavaScript(
+            "return window.__jadeFlush ? await window.__jadeFlush() : true",
+            in: nil,
+            in: .page
+        ) { _ in finish() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) { finish() }
+    }
+
     deinit {
         webView?.configuration.userContentController.removeScriptMessageHandler(forName: "jade")
         ptySession?.stop()
