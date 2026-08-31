@@ -2,95 +2,51 @@ package engine
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"os"
 	"os/exec"
-
-	"github.com/coder/websocket"
-	"github.com/creack/pty"
+	"runtime"
 )
 
-type terminalMessage struct {
-	Type string `json:"type"`
-	Cols uint16 `json:"cols"`
-	Rows uint16 `json:"rows"`
+const ghosttyScript = `on run argv
+set targetDirectory to item 1 of argv
+tell application "Ghostty"
+	set cfg to new surface configuration
+	set initial working directory of cfg to targetDirectory
+	activate
+	new window with configuration cfg
+end tell
+end run`
+
+var openGhostty = func(ctx context.Context, directory string) error {
+	if runtime.GOOS != "darwin" {
+		return errors.New("the native Ghostty terminal requires macOS")
+	}
+	if _, err := exec.LookPath("/usr/bin/osascript"); err != nil {
+		return errors.New("AppleScript is unavailable")
+	}
+	command := exec.CommandContext(ctx, "/usr/bin/osascript", "-e", ghosttyScript, directory)
+	if output, err := command.CombinedOutput(); err != nil {
+		message := string(output)
+		if message == "" {
+			message = err.Error()
+		}
+		return errors.New(message)
+	}
+	return nil
 }
 
 func (a *app) terminal(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodGet {
-		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+	if request.Method != http.MethodPost || !parseForm(response, request) {
 		return
 	}
-	cwd, err := jadeDirectory(a.root, queryPath(request, "jade", "."))
+	cwd, err := workspaceDirectory(a.root, request.FormValue("jade"))
+	if err == nil {
+		err = openGhostty(request.Context(), cwd)
+	}
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
+		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	connection, err := websocket.Accept(response, request, nil)
-	if err != nil {
-		return
-	}
-	defer connection.CloseNow()
-	connection.SetReadLimit(64 * 1024)
-
-	shell := os.Getenv("SHELL")
-	if shell == "" {
-		shell = "/bin/sh"
-	}
-	command := exec.Command(shell, "-l")
-	command.Dir = cwd
-	command.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
-	terminal, err := pty.StartWithSize(command, &pty.Winsize{Cols: 100, Rows: 28})
-	if err != nil {
-		_ = connection.Close(websocket.StatusInternalError, err.Error())
-		return
-	}
-	defer func() {
-		_ = terminal.Close()
-		if command.Process != nil {
-			_ = command.Process.Kill()
-		}
-		_ = command.Wait()
-	}()
-
-	ctx, cancel := context.WithCancel(request.Context())
-	defer cancel()
-	go func() {
-		buffer := make([]byte, 32*1024)
-		for {
-			length, readErr := terminal.Read(buffer)
-			if length > 0 {
-				if writeErr := connection.Write(ctx, websocket.MessageBinary, buffer[:length]); writeErr != nil {
-					return
-				}
-			}
-			if readErr != nil {
-				if !errors.Is(readErr, io.EOF) {
-					_ = connection.Close(websocket.StatusNormalClosure, "shell exited")
-				}
-				return
-			}
-		}
-	}()
-
-	for {
-		kind, payload, readErr := connection.Read(ctx)
-		if readErr != nil {
-			return
-		}
-		switch kind {
-		case websocket.MessageBinary:
-			if _, err = terminal.Write(payload); err != nil {
-				return
-			}
-		case websocket.MessageText:
-			var message terminalMessage
-			if json.Unmarshal(payload, &message) == nil && message.Type == "resize" && message.Cols >= 2 && message.Rows >= 2 && message.Cols <= 1000 && message.Rows <= 1000 {
-				_ = pty.Setsize(terminal, &pty.Winsize{Cols: message.Cols, Rows: message.Rows})
-			}
-		}
-	}
+	writeJSON(response, http.StatusOK, map[string]string{"message": "Opened a native Ghostty terminal."})
 }

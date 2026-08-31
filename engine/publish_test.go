@@ -1,12 +1,15 @@
 package engine
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -145,5 +148,34 @@ func TestSubstackDraftSeparatesTitleAndBody(t *testing.T) {
 	}
 	if response.Code != http.StatusOK || draft["title"] != "Exact title" || draft["text"] != "A **clear** body." || !strings.Contains(draft["html"], "<strong>clear</strong>") || strings.Contains(draft["html"], "<h1>") {
 		t.Fatalf("draft = %d %#v", response.Code, draft)
+	}
+}
+
+func TestArxivPublishPackagesPaperSources(t *testing.T) {
+	application := testApp(t)
+	writeTestFile(t, filepath.Join(application.root, "paper", "main.tex"), "\\documentclass{article}\n")
+	writeTestFile(t, filepath.Join(application.root, "paper", "references.bib"), "@book{x}\n")
+	writeTestFile(t, filepath.Join(application.root, "paper", "main.log"), "generated\n")
+	writeTestFile(t, filepath.Join(application.root, "paper", "build", "main.pdf"), "generated\n")
+
+	form := url.Values{"jade": {"."}, "file": {"paper/main.tex"}}
+	response := postForm(application.handler(), "/publish/arxiv", "127.0.0.1:7333", "http://127.0.0.1:7333", form)
+	if response.Code != http.StatusOK {
+		t.Fatalf("arXiv package = %d: %s", response.Code, response.Body.String())
+	}
+	if disposition := response.Header().Get("Content-Disposition"); disposition != `attachment; filename="main-arxiv.zip"` {
+		t.Fatalf("content disposition = %q", disposition)
+	}
+	archive, err := zip.NewReader(bytes.NewReader(response.Body.Bytes()), int64(response.Body.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, file := range archive.File {
+		names = append(names, file.Name)
+	}
+	sort.Strings(names)
+	if strings.Join(names, ",") != "main.tex,references.bib" {
+		t.Fatalf("arXiv package files = %#v", names)
 	}
 }

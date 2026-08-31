@@ -1,13 +1,16 @@
 package engine
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -88,7 +91,7 @@ func absoluteGitPath(repoRoot, path string) string {
 }
 
 func (a *app) repositoryState(jadePath string) (repositoryState, error) {
-	jadeRoot, err := jadeDirectory(a.root, jadePath)
+	jadeRoot, err := workspaceDirectory(a.root, jadePath)
 	if err != nil {
 		return repositoryState{}, err
 	}
@@ -248,4 +251,101 @@ func (a *app) publishSubstack(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	writeJSON(response, http.StatusOK, map[string]string{"title": title, "text": body, "html": rendered.String()})
+}
+
+var arxivGeneratedExtensions = map[string]bool{
+	".aux": true, ".fls": true, ".log": true, ".out": true, ".toc": true,
+}
+
+func arxivArchive(response io.Writer, paperPath string) error {
+	paperRoot := filepath.Dir(paperPath)
+	archive := zip.NewWriter(response)
+	walkErr := filepath.WalkDir(paperRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		name := entry.Name()
+		if entry.IsDir() {
+			if path != paperRoot && (strings.HasPrefix(name, ".") || name == "build" || ignoredDirectories[name]) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 || name == ".DS_Store" || strings.HasSuffix(strings.ToLower(name), ".synctex.gz") || arxivGeneratedExtensions[strings.ToLower(filepath.Ext(name))] {
+			return nil
+		}
+		relative, err := filepath.Rel(paperRoot, path)
+		if err != nil {
+			return err
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+		header.Name = filepath.ToSlash(relative)
+		header.Method = zip.Deflate
+		target, err := archive.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		source, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		_, copyErr := io.Copy(target, source)
+		closeErr := source.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		return closeErr
+	})
+	closeErr := archive.Close()
+	if walkErr != nil {
+		return walkErr
+	}
+	return closeErr
+}
+
+func (a *app) publishArxiv(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost || !parseForm(response, request) {
+		return
+	}
+	file := request.FormValue("file")
+	extension := strings.ToLower(filepath.Ext(file))
+	if extension != ".tex" && extension != ".pdf" && extension != ".zip" {
+		http.Error(response, "select a TeX, PDF, or ZIP paper before publishing to arXiv", http.StatusBadRequest)
+		return
+	}
+	path, err := existingFile(a.root, request.FormValue("jade"), file)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	if extension == ".tex" {
+		name += "-arxiv.zip"
+		response.Header().Set("Content-Type", "application/zip")
+	} else {
+		name += extension
+		response.Header().Set("Content-Type", "application/octet-stream")
+	}
+	response.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, strings.ReplaceAll(name, `"`, "")))
+	response.Header().Set("Cache-Control", "no-store")
+	if extension == ".tex" {
+		if err = arxivArchive(response, path); err != nil {
+			http.Error(response, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	source, err := os.Open(path)
+	if err != nil {
+		http.Error(response, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer source.Close()
+	_, _ = io.Copy(response, source)
 }

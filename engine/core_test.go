@@ -32,6 +32,9 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "synthetic", markerName), "# Synthetic data\n\n```sh\nprintf 'x\\n1\\n' > data.csv\n```\n")
 	writeTestFile(t, filepath.Join(root, "synthetic", "generate.go"), "package main")
 	writeTestFile(t, filepath.Join(root, ".git", "ignored.txt"), "ignored")
+	writeTestFile(t, filepath.Join(root, ".build", "generated.swift"), "ignored")
+	writeTestFile(t, filepath.Join(root, ".deps", "dependency.swift"), "ignored")
+	writeTestFile(t, filepath.Join(root, ".tmp", "jade-engine.log"), "ignored")
 
 	workspace, err := LoadWorkspace(root, ".")
 	if err != nil {
@@ -48,10 +51,23 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	if child.Title != "Synthetic data" || child.Path != "synthetic" {
 		t.Fatalf("unexpected child workspace: %#v", child)
 	}
-	found, err := FindJadeRoot(filepath.Join(root, "synthetic", "generate.go"))
+	found, err := ResolveWorkspaceRoot(filepath.Join(root, "synthetic", "generate.go"))
 	want, realErr := filepath.EvalSymlinks(filepath.Join(root, "synthetic"))
 	if err != nil || realErr != nil || found != want {
-		t.Fatalf("nearest JaDE root = %q, %v", found, err)
+		t.Fatalf("workspace root = %q, %v", found, err)
+	}
+}
+
+func TestWorkspaceDoesNotRequireJadeMarker(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+
+	workspace, err := LoadWorkspace(root, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if workspace.HasMarker || workspace.Title != filepath.Base(root) || len(workspace.Files) != 1 || workspace.Files[0] != "main.go" {
+		t.Fatalf("plain workspace = %#v", workspace)
 	}
 }
 

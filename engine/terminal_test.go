@@ -3,46 +3,26 @@ package engine
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
-	"strings"
+	"net/url"
 	"testing"
-	"time"
-
-	"github.com/coder/websocket"
 )
 
-func TestTerminalRunsInteractiveShellInActiveJade(t *testing.T) {
+func TestTerminalOpensGhosttyInActiveWorkspace(t *testing.T) {
 	application := testApp(t)
-	server := httptest.NewServer(http.HandlerFunc(application.terminal))
-	defer server.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	address := "ws" + strings.TrimPrefix(server.URL, "http") + "/terminal?jade=."
-	connection, _, err := websocket.Dial(ctx, address, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer connection.CloseNow()
-
-	if err = connection.Write(ctx, websocket.MessageText, []byte(`{"type":"resize","cols":91,"rows":27}`)); err != nil {
-		t.Fatal(err)
-	}
-	if err = connection.Write(ctx, websocket.MessageBinary, []byte("printf '__JADE_TERMINAL__\\n'; pwd\n")); err != nil {
-		t.Fatal(err)
+	original := openGhostty
+	defer func() { openGhostty = original }()
+	opened := ""
+	openGhostty = func(_ context.Context, directory string) error {
+		opened = directory
+		return nil
 	}
 
-	var output strings.Builder
-	for !strings.Contains(output.String(), "__JADE_TERMINAL__") || !strings.Contains(output.String(), application.root) {
-		kind, payload, readErr := connection.Read(ctx)
-		if readErr != nil {
-			t.Fatalf("terminal read: %v; output=%q", readErr, output.String())
-		}
-		if kind == websocket.MessageBinary {
-			output.Write(payload)
-		}
+	form := url.Values{"jade": {"."}}
+	response := postForm(application.handler(), "/terminal", "127.0.0.1:7333", "http://127.0.0.1:7333", form)
+	if response.Code != http.StatusOK {
+		t.Fatalf("terminal = %d: %s", response.Code, response.Body.String())
 	}
-	if err = connection.Write(ctx, websocket.MessageBinary, []byte("exit\n")); err != nil {
-		t.Fatal(err)
+	if opened != application.root {
+		t.Fatalf("Ghostty directory = %q, want %q", opened, application.root)
 	}
 }

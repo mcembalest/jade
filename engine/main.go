@@ -55,74 +55,80 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{{.Workspace.Title}} · JaDE</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%3E%3Ctext%20y=%22.9em%22%20font-size=%2290%22%3E🐉%3C/text%3E%3C/svg%3E">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
   <style>
-    :root { --ink:#17201b; --muted:#66716a; --line:#d7ddd9; --paper:#fff; --side:#f0f3f1; --jade:#176b43; --terminal:#111713; }
+    :root { --ink:#121815; --muted:#68736d; --line:#dfe5e1; --canvas:#fbfcfb; --panel:#f3f6f4; --paper:#fff; --jade:#0b6b42; --jade-soft:#e2f0e8; }
     * { box-sizing:border-box; }
     html, body { height:100%; }
-    body { margin:0; overflow:hidden; color:var(--ink); background:var(--paper); font:14px/1.45 system-ui,sans-serif; }
+    body { margin:0; overflow:hidden; color:var(--ink); background:var(--canvas); font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; }
     button, input, select, textarea { font:inherit; }
-    button { color:var(--ink); background:var(--paper); border:1px solid var(--line); padding:.38rem .62rem; cursor:pointer; }
-    button:hover { border-color:#9eaaa2; }
-    button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid var(--jade); outline-offset:-2px; }
+    button { min-height:30px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; padding:.34rem .68rem; cursor:pointer; }
+    button:hover { border-color:#aeb9b2; background:#f8faf9; }
+    button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid #38a172; outline-offset:2px; }
     button.primary { color:white; border-color:var(--jade); background:var(--jade); }
-    button:disabled { cursor:not-allowed; opacity:.5; }
-    header { height:44px; display:flex; align-items:center; gap:.7rem; padding:0 .8rem; border-bottom:1px solid var(--line); background:var(--paper); }
-    .brand { color:var(--jade); font-weight:750; letter-spacing:-.02em; }
-    .project { min-width:0; overflow:hidden; color:var(--muted); text-overflow:ellipsis; white-space:nowrap; }
-    .header-actions { display:flex; gap:.45rem; margin-left:auto; }
-    #shell { height:calc(100% - 44px); display:grid; grid-template-columns:224px minmax(0,1fr); }
-    aside { min-width:0; overflow:auto; border-right:1px solid var(--line); background:var(--side); }
-    .explorer-head { position:sticky; top:0; z-index:1; height:36px; display:flex; align-items:center; padding:0 .55rem .0rem .75rem; border-bottom:1px solid var(--line); background:var(--side); color:var(--muted); font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-    .explorer-head button { margin-left:auto; padding:0; width:24px; height:24px; border:0; background:transparent; font-size:18px; line-height:1; }
+    button.primary:hover { background:#075b37; }
+    button:disabled { cursor:not-allowed; opacity:.45; }
+    header { height:48px; display:flex; align-items:center; padding:0 12px 0 14px; border-bottom:1px solid var(--line); background:var(--paper); }
+    .identity { min-width:0; display:flex; align-items:center; gap:8px; }
+    .brand { color:var(--jade); font-size:12px; font-weight:800; letter-spacing:.12em; }
+    .project { min-width:0; overflow:hidden; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+    .path { min-width:0; overflow:hidden; color:var(--muted); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow:ellipsis; white-space:nowrap; }
+    .branch-control { display:flex; align-items:center; gap:5px; margin-left:4px; padding-left:10px; border-left:1px solid var(--line); color:var(--muted); font-size:10px; }
+    .branch-control[hidden] { display:none; }
+    .branch-control select { max-width:180px; height:28px; border:0; border-radius:6px; padding:0 24px 0 6px; color:#26322b; background:#f2f5f3; font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .header-actions { display:flex; gap:6px; margin-left:auto; padding-left:12px; }
+    #shell { height:calc(100% - 48px); display:grid; grid-template-columns:236px minmax(0,1fr); }
+    aside { min-width:0; overflow:auto; border-right:1px solid var(--line); background:var(--panel); }
+    .explorer-head { position:sticky; top:0; z-index:1; height:38px; display:flex; align-items:center; padding:0 7px 0 14px; border-bottom:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:10px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
+    .explorer-head button { margin-left:auto; padding:0; width:25px; min-height:25px; border:0; background:transparent; font-size:17px; line-height:1; }
     .tree, .tree ul { margin:0; padding:0; list-style:none; }
-    .tree { padding:.4rem 0 .8rem; }
-    .tree ul { padding-left:.8rem; }
-    .tree details > summary { display:flex; align-items:center; gap:.35rem; padding:.24rem .6rem; cursor:pointer; color:#36423b; list-style:none; }
-    .tree details > summary::before { content:'›'; width:.7rem; color:#849087; transition:transform .1s linear; }
+    .tree { padding:6px 0 12px; }
+    .tree ul { padding-left:11px; }
+    .tree details > summary { display:flex; align-items:center; gap:5px; padding:4px 9px; cursor:pointer; color:#37423c; list-style:none; }
+    .tree details > summary::before { content:'›'; width:8px; color:#89948d; transition:transform .1s linear; }
     .tree details[open] > summary::before { transform:rotate(90deg); }
-    .tree a { display:block; overflow:hidden; padding:.25rem .6rem .25rem 1.3rem; color:var(--ink); text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
-    .tree a:hover { background:#e2e8e4; }
-    .tree a.active { color:#0d5835; background:#dbe9e0; font-weight:650; }
-    .tree a.jade-file::before { content:'◆'; margin-right:.42rem; color:var(--jade); font-size:.62rem; }
-    .jade-mark { margin-left:auto; color:var(--jade); font-size:9px; font-weight:750; letter-spacing:.05em; text-transform:uppercase; }
-    #workbench { min-width:0; min-height:0; display:grid; grid-template-rows:minmax(0,1fr) auto; }
-    #document { min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); }
-    #document.jade-open { grid-template-columns:minmax(280px,1fr) minmax(320px,1fr); }
+    .tree a { position:relative; display:block; overflow:hidden; padding:4px 9px 4px 25px; color:var(--ink); text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
+    .tree a:hover { background:#e9eeeb; }
+    .tree a.active { color:#064d2f; background:var(--jade-soft); font-weight:650; }
+    .tree a.active::after { position:absolute; inset:4px auto 4px 0; width:3px; border-radius:0 2px 2px 0; background:var(--jade); content:''; }
+    .tree a.jade-file::before { content:'◆'; margin-right:6px; color:var(--jade); font-size:8px; }
+    .jade-mark { margin-left:auto; color:var(--jade); font-size:8px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+    #workbench { min-width:0; min-height:0; }
+    #document { width:100%; height:100%; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); }
+    #document.jade-open { grid-template-columns:minmax(320px,1fr) minmax(360px,1fr); }
     #editor-form, #resolved { min-width:0; min-height:0; display:flex; flex-direction:column; }
     #resolved { border-left:1px solid var(--line); }
-    .filebar { height:36px; flex:0 0 auto; display:flex; align-items:center; gap:.65rem; padding:0 .75rem; border-bottom:1px solid var(--line); background:#fafbfa; font:12px ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #save-status { margin-left:auto; color:var(--muted); font:11px system-ui,sans-serif; }
-    textarea { width:100%; min-height:0; flex:1; resize:none; border:0; padding:1rem 1.1rem; color:#18221c; background:var(--paper); tab-size:2; outline:0; font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #resolved[hidden], #terminal-panel[hidden] { display:none; }
+    .filebar { height:38px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--paper); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    #save-status { margin-left:auto; color:var(--muted); font:11px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
+    textarea { width:100%; min-height:0; flex:1; resize:none; border:0; padding:20px clamp(20px,4vw,56px); color:#151c18; background:var(--paper); tab-size:2; outline:0; font:13px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    #resolved[hidden] { display:none; }
     #view-frame { width:100%; min-height:0; flex:1; border:0; background:white; }
-    #terminal-panel { height:36vh; min-height:180px; border-top:1px solid #2b352e; background:var(--terminal); }
-    #terminal { height:100%; padding:.45rem; }
-    dialog { width:min(560px,calc(100vw - 2rem)); padding:0; border:1px solid #aeb8b1; background:var(--paper); box-shadow:0 18px 60px #0d1b1333; }
-    dialog::backdrop { background:#17201b55; }
-    .modal-head, .modal-actions { display:flex; align-items:center; gap:.6rem; padding:.75rem .9rem; }
+    dialog { width:min(540px,calc(100vw - 28px)); padding:0; border:1px solid #aeb8b1; border-radius:12px; background:var(--paper); box-shadow:0 20px 70px #1020182b; }
+    dialog::backdrop { background:#17201b4a; backdrop-filter:blur(2px); }
+    .modal-head, .modal-actions { display:flex; align-items:center; gap:8px; padding:12px 14px; }
     .modal-head { border-bottom:1px solid var(--line); }
-    .modal-head strong { font-size:15px; }
-    .modal-head button { margin-left:auto; border:0; font-size:18px; }
-    .modal-body { display:grid; gap:.8rem; padding:1rem; }
-    .modal-body label { display:grid; gap:.3rem; color:var(--muted); font-size:12px; }
-    .modal-body input, .modal-body select { width:100%; padding:.48rem .55rem; border:1px solid var(--line); color:var(--ink); background:white; }
-    #publish-summary { min-height:5rem; max-height:15rem; overflow:auto; margin:0; padding:.7rem; border:1px solid var(--line); background:#f7f9f7; white-space:pre-wrap; font:12px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #publish-note { min-height:1.3rem; margin:0; color:var(--muted); font-size:12px; }
+    .modal-head strong { font-size:14px; }
+    .modal-head button { margin-left:auto; border:0; background:transparent; font-size:17px; }
+    .modal-body { display:grid; gap:12px; padding:16px; }
+    .modal-body label { display:grid; gap:5px; color:var(--muted); font-size:11px; font-weight:600; }
+    .modal-body label[hidden] { display:none; }
+    .modal-body input, .modal-body select { width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:white; }
+    #publish-summary { min-height:76px; max-height:220px; overflow:auto; margin:0; padding:10px; border:1px solid var(--line); border-radius:7px; background:#f7f9f8; white-space:pre-wrap; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    #publish-note { min-height:18px; margin:0; color:var(--muted); font-size:11px; }
     .modal-actions { justify-content:flex-end; border-top:1px solid var(--line); }
     @media (max-width:850px) {
-      #shell { grid-template-columns:170px minmax(0,1fr); }
+      #shell { grid-template-columns:178px minmax(0,1fr); }
+      .path { display:none; }
       #document.jade-open { grid-template-columns:1fr; grid-template-rows:minmax(240px,1fr) minmax(240px,1fr); overflow:auto; }
       #document.jade-open #resolved { border-top:1px solid var(--line); border-left:0; }
     }
+    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; transition:none!important; } }
   </style>
 </head>
 <body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}">
   <header>
-    <span class="brand">JaDE</span>
-    <span class="project">{{.Workspace.Path}} / {{.Workspace.Title}}</span>
+    <div class="identity"><span class="brand">JADE</span><span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span><label class="branch-control" hidden><span>branch</span><select id="branch-select" aria-label="Git branch"></select></label></div>
     <div class="header-actions">
-      <button id="terminal-toggle" type="button" aria-expanded="false">Terminal</button>
+      <button id="terminal-toggle" type="button">Open terminal</button>
       <button id="publish-open" class="primary" type="button">Publish</button>
     </div>
   </header>
@@ -144,21 +150,18 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
           <iframe id="view-frame" sandbox="allow-top-navigation-by-user-activation" src="{{.ViewURL}}" title="Resolved JaDE view"></iframe>
         </section>
       </div>
-      <section id="terminal-panel" hidden aria-label="Terminal"><div id="terminal"></div></section>
     </main>
   </div>
   <dialog id="publish-dialog">
     <div class="modal-head"><strong>Publish</strong><button id="publish-close" type="button" aria-label="Close">×</button></div>
     <div class="modal-body">
-      <label>Destination<select id="publish-destination"><option value="github">GitHub</option><option value="substack">Substack</option></select></label>
+      <label>Destination<select id="publish-destination"><option value="github">GitHub</option><option value="arxiv">arXiv</option><option value="substack">Substack</option></select></label>
       <pre id="publish-summary">Checking the nearest repository…</pre>
       <label id="commit-field">Commit message<input id="commit-message" value="Update from JaDE"></label>
-      <p id="publish-note"></p>
+      <p id="publish-note" role="status"></p>
     </div>
     <div class="modal-actions"><button id="publish-cancel" type="button">Cancel</button><button id="publish-confirm" class="primary" type="button">Commit, push & open PR</button></div>
   </dialog>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
   <script src="/app.js" defer></script>
 </body>
 </html>`
@@ -251,7 +254,7 @@ const appScript = `(() => {
   form.addEventListener("submit", event => { event.preventDefault(); save(); });
   addEventListener("keydown", event => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); toggleTerminal(); }
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); openTerminal(); }
   });
   addEventListener("beforeunload", event => { rememberCursor(); if (dirty) { event.preventDefault(); event.returnValue = ""; } });
   addEventListener("popstate", () => location.reload());
@@ -265,34 +268,52 @@ const appScript = `(() => {
     location.href = await response.text();
   });
 
-  let terminal, socket, fit;
-  const terminalPanel = document.querySelector("#terminal-panel");
   const terminalToggle = document.querySelector("#terminal-toggle");
-  function fitTerminal() {
-    if (!fit || terminalPanel.hidden) return;
-    fit.fit();
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({type:"resize", cols:terminal.cols, rows:terminal.rows}));
+  async function openTerminal() {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.jade) {
+      window.webkit.messageHandlers.jade.postMessage({type:"terminal", jade:body.dataset.jade});
+      status.textContent = "Terminal opened";
+      return;
+    }
+    terminalToggle.disabled = true;
+    terminalToggle.textContent = "Opening…";
+    const data = new FormData();
+    data.set("jade", body.dataset.jade);
+    const response = await fetch("/terminal", {method:"POST", body:data});
+    const result = await response.json();
+    terminalToggle.disabled = false;
+    terminalToggle.textContent = "Open terminal";
+    status.textContent = response.ok ? "Terminal opened" : (result.error || "Could not open Ghostty");
   }
-  function startTerminal() {
-    if (terminal) return;
-    if (!window.Terminal || !window.FitAddon) { document.querySelector("#terminal").textContent = "Terminal assets unavailable."; return; }
-    terminal = new Terminal({cursorBlink:true, convertEol:false, fontFamily:"ui-monospace, SFMono-Regular, Menlo, monospace", fontSize:13, theme:{background:"#111713", foreground:"#dbe5dd", cursor:"#6fd49c"}});
-    fit = new FitAddon.FitAddon(); terminal.loadAddon(fit); terminal.open(document.querySelector("#terminal"));
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    socket = new WebSocket(protocol + "//" + location.host + "/terminal?jade=" + encodeURIComponent(body.dataset.jade));
-    socket.binaryType = "arraybuffer";
-    socket.addEventListener("open", fitTerminal);
-    socket.addEventListener("message", event => terminal.write(new Uint8Array(event.data)));
-    socket.addEventListener("close", () => terminal.write("\r\n[terminal closed]\r\n"));
-    terminal.onData(data => { if (socket.readyState === WebSocket.OPEN) socket.send(new TextEncoder().encode(data)); });
-    new ResizeObserver(fitTerminal).observe(terminalPanel);
+  terminalToggle.addEventListener("click", openTerminal);
+
+  const branchControl = document.querySelector(".branch-control");
+  const branchSelect = document.querySelector("#branch-select");
+  let currentBranch = "";
+  async function loadBranches() {
+    const response = await fetch("/git/branches?jade=" + encodeURIComponent(body.dataset.jade));
+    if (!response.ok) return;
+    const state = await response.json();
+    currentBranch = state.current;
+    branchSelect.replaceChildren(...state.branches.map(branch => {
+      const option = document.createElement("option");
+      option.value = branch; option.textContent = branch; option.selected = branch === state.current;
+      return option;
+    }));
+    branchControl.hidden = state.branches.length === 0;
   }
-  function toggleTerminal() {
-    terminalPanel.hidden = !terminalPanel.hidden;
-    terminalToggle.setAttribute("aria-expanded", String(!terminalPanel.hidden));
-    if (!terminalPanel.hidden) { startTerminal(); requestAnimationFrame(() => { fitTerminal(); terminal && terminal.focus(); }); }
-  }
-  terminalToggle.addEventListener("click", toggleTerminal);
+  branchSelect.addEventListener("change", async () => {
+    const branch = branchSelect.value;
+    if (branch === currentBranch) return;
+    if (!(await save())) { branchSelect.value = currentBranch; return; }
+    branchSelect.disabled = true; status.textContent = "Switching branch…";
+    const data = new FormData(); data.set("jade", body.dataset.jade); data.set("branch", branch);
+    const response = await fetch("/git/switch", {method:"POST", body:data});
+    const result = await response.json();
+    if (!response.ok) { status.textContent = result.error || "Could not switch branch"; branchSelect.value = currentBranch; branchSelect.disabled = false; return; }
+    location.href = "/";
+  });
+  loadBranches();
 
   const dialog = document.querySelector("#publish-dialog");
   const destination = document.querySelector("#publish-destination");
@@ -303,12 +324,22 @@ const appScript = `(() => {
   let publishStatus;
 
   async function loadPublish() {
+    const file = body.dataset.file.toLowerCase();
     if (destination.value === "substack") {
       commitField.hidden = true;
-      summary.textContent = body.dataset.file.endsWith(".md") ? "The active Markdown will be copied as rich text, then Substack’s editor will open." : "Select a Markdown file before publishing to Substack.";
+      summary.textContent = file.endsWith(".md") ? "The active Markdown will be copied as rich text, then Substack’s editor will open." : "Select a Markdown file before publishing to Substack.";
       note.textContent = "JaDE never receives your Substack credentials.";
       confirm.textContent = "Copy & open Substack";
-      confirm.disabled = !body.dataset.file.endsWith(".md");
+      confirm.disabled = !file.endsWith(".md");
+      return;
+    }
+    if (destination.value === "arxiv") {
+      const ready = /\.(tex|pdf|zip)$/.test(file);
+      commitField.hidden = true;
+      summary.textContent = ready ? (file.endsWith(".tex") ? "JaDE will package the active TeX file and its neighboring source files, download the ZIP, then open arXiv’s submission workflow." : "JaDE will download the active paper, then open arXiv’s submission workflow.") : "Select a TeX, PDF, or ZIP paper before publishing to arXiv.";
+      note.textContent = "Submission stays interactive, as arXiv recommends for individual authors. JaDE never receives your arXiv credentials.";
+      confirm.textContent = "Download & open arXiv";
+      confirm.disabled = !ready;
       return;
     }
     commitField.hidden = false; confirm.textContent = "Commit, push & open PR"; confirm.disabled = true;
@@ -326,12 +357,25 @@ const appScript = `(() => {
   document.querySelector("#publish-cancel").addEventListener("click", () => dialog.close());
   destination.addEventListener("change", loadPublish);
   confirm.addEventListener("click", async () => {
-    confirm.disabled = true; note.textContent = destination.value === "github" ? "Publishing…" : "Preparing draft…";
+    confirm.disabled = true;
+    note.textContent = destination.value === "github" ? "Publishing…" : destination.value === "arxiv" ? "Packaging paper…" : "Preparing draft…";
     if (destination.value === "github") {
       const data = new FormData(); data.set("jade", body.dataset.jade); data.set("message", document.querySelector("#commit-message").value);
       const response = await fetch("/publish/github", {method:"POST", body:data}); const result = await response.json();
       if (!response.ok) { note.textContent = result.error; confirm.disabled = false; return; }
       note.textContent = result.message; if (result.url) window.open(result.url, "_blank", "noopener"); dialog.close(); return;
+    }
+    if (destination.value === "arxiv") {
+      const opened = window.open("about:blank", "_blank");
+      const data = new FormData(); data.set("jade", body.dataset.jade); data.set("file", body.dataset.file);
+      const response = await fetch("/publish/arxiv", {method:"POST", body:data});
+      if (!response.ok) { note.textContent = await response.text(); opened && opened.close(); confirm.disabled = false; return; }
+      const blob = await response.blob();
+      const match = (response.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
+      const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = match ? match[1] : "paper-arxiv.zip"; link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      if (opened) opened.location = "https://arxiv.org/submit"; else window.open("https://arxiv.org/submit", "_blank", "noopener");
+      dialog.close(); return;
     }
     const opened = window.open("https://substack.com/home/post/publish", "_blank");
     const data = new FormData(); data.set("file", body.dataset.file); data.set("content", editor.value);
@@ -389,6 +433,9 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/", a.guard(a.home))
 	mux.HandleFunc("/file", a.guard(a.file))
 	mux.HandleFunc("/save", a.guard(a.save))
+	mux.HandleFunc("/git/branches", a.guard(a.branches))
+	mux.HandleFunc("/git/switch", a.guard(a.switchBranch))
+	mux.HandleFunc("/publish/arxiv", a.guard(a.publishArxiv))
 	mux.HandleFunc("/new", a.guard(a.create))
 	mux.HandleFunc("/front", a.guard(a.front))
 	mux.HandleFunc("/view", a.guard(a.view))
@@ -540,11 +587,18 @@ func (a *app) pageData(jadePath, selected, view string) (pageData, error) {
 		return pageData{}, err
 	}
 	if selected == "" {
-		selected = markerName
+		if workspace.HasMarker {
+			selected = markerName
+		} else if len(workspace.Files) > 0 {
+			selected = workspace.Files[0]
+		}
 	}
-	contents, err := ReadWorkspaceFile(a.root, workspace.Path, selected)
-	if err != nil {
-		return pageData{}, err
+	contents := ""
+	if selected != "" {
+		contents, err = ReadWorkspaceFile(a.root, workspace.Path, selected)
+		if err != nil {
+			return pageData{}, err
+		}
 	}
 	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Files: buildFileTree(workspace), IsJade: selected == markerName}
 	if !data.IsJade {
@@ -572,14 +626,14 @@ func (a *app) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := a.pageData(queryPath(request, "jade", "."), queryPath(request, "file", markerName), request.URL.Query().Get("view"))
+	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"))
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' ws: wss:; frame-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'")
+	response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'")
 	if err := a.page.Execute(response, data); err != nil {
 		log.Printf("render: %v", err)
 	}
@@ -590,7 +644,7 @@ func (a *app) file(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := a.pageData(queryPath(request, "jade", "."), queryPath(request, "file", markerName), request.URL.Query().Get("view"))
+	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"))
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
@@ -631,7 +685,7 @@ func (a *app) create(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	jadePath, filePath := request.FormValue("jade"), strings.TrimSpace(request.FormValue("path"))
-	currentRoot, err := jadeDirectory(a.root, jadePath)
+	currentRoot, err := workspaceDirectory(a.root, jadePath)
 	if err == nil {
 		var candidate string
 		candidate, err = safeJoin(currentRoot, filePath)

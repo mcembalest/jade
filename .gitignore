@@ -1,3 +1,6 @@
 .DS_Store
 /jade
 sessions.md
+/.tmp/
+/native/.build/
+/native/.deps/

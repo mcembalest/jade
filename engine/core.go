@@ -18,13 +18,20 @@ const (
 	maximumTextBytes = 5_000_000
 )
 
-var ignoredDirectories = map[string]bool{".pixi": true, "node_modules": true}
+var ignoredDirectories = map[string]bool{
+	".build":       true,
+	".deps":        true,
+	".pixi":        true,
+	".tmp":         true,
+	"node_modules": true,
+}
 
 type Workspace struct {
-	Title    string
-	Path     string
-	Markdown string
-	Files    []string
+	Title     string
+	Path      string
+	Markdown  string
+	Files     []string
+	HasMarker bool
 }
 
 func jadeTitle(markdown string) string {
@@ -71,7 +78,9 @@ func safeJoin(root, path string) (string, error) {
 	return candidate, nil
 }
 
-func FindJadeRoot(start string) (string, error) {
+// ResolveWorkspaceRoot resolves a folder or a file's containing folder.
+// A workspace is any directory; jade.md enriches one but never gates opening it.
+func ResolveWorkspaceRoot(start string) (string, error) {
 	absolute, err := filepath.Abs(start)
 	if err != nil {
 		return "", err
@@ -83,34 +92,21 @@ func FindJadeRoot(start string) (string, error) {
 	if !info.IsDir() {
 		absolute = filepath.Dir(absolute)
 	}
-	absolute, err = filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return "", err
-	}
-	for {
-		if info, statErr := os.Stat(filepath.Join(absolute, markerName)); statErr == nil && info.Mode().IsRegular() {
-			return absolute, nil
-		}
-		parent := filepath.Dir(absolute)
-		if parent == absolute {
-			return "", fmt.Errorf("no %s found at or above %s", markerName, start)
-		}
-		absolute = parent
-	}
+	return filepath.EvalSymlinks(absolute)
 }
 
-func jadeDirectory(runtimeRoot, jadePath string) (string, error) {
+func workspaceDirectory(runtimeRoot, workspacePath string) (string, error) {
 	root, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
 		return "", err
 	}
-	if jadePath == "." {
-		jadePath = ""
+	if workspacePath == "." {
+		workspacePath = ""
 	}
 	var candidate string
-	if jadePath == "" {
+	if workspacePath == "" {
 		candidate = root
-	} else if candidate, err = safeJoin(root, jadePath); err != nil {
+	} else if candidate, err = safeJoin(root, workspacePath); err != nil {
 		return "", err
 	}
 	actual, err := filepath.EvalSymlinks(candidate)
@@ -118,11 +114,17 @@ func jadeDirectory(runtimeRoot, jadePath string) (string, error) {
 		return "", err
 	}
 	if !within(root, actual) {
-		return "", errors.New("JaDE leaves the launched root")
+		return "", errors.New("workspace leaves the launched root")
 	}
-	info, err := os.Stat(filepath.Join(actual, markerName))
-	if err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a JaDE", jadePath)
+	info, err := os.Stat(actual)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%s is not a workspace directory", workspacePath)
+	}
+	if actual != root {
+		marker, markerErr := os.Stat(filepath.Join(actual, markerName))
+		if markerErr != nil || !marker.Mode().IsRegular() {
+			return "", fmt.Errorf("%s is not an inner JaDE", workspacePath)
+		}
 	}
 	return actual, nil
 }
@@ -197,15 +199,19 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, err
 	}
-	currentRoot, err := jadeDirectory(root, jadePath)
+	currentRoot, err := workspaceDirectory(root, jadePath)
 	if err != nil {
 		return Workspace{}, err
 	}
-	marker, err := os.ReadFile(filepath.Join(currentRoot, markerName))
-	if err != nil {
-		return Workspace{}, err
+	marker, markerErr := os.ReadFile(filepath.Join(currentRoot, markerName))
+	hasMarker := markerErr == nil
+	if markerErr != nil && !errors.Is(markerErr, os.ErrNotExist) {
+		return Workspace{}, markerErr
 	}
-	title := jadeTitle(string(marker))
+	title := filepath.Base(currentRoot)
+	if hasMarker {
+		title = jadeTitle(string(marker))
+	}
 	files, err := scanWorkspace(currentRoot)
 	if err != nil {
 		return Workspace{}, err
@@ -220,15 +226,16 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 		return files[i] < files[j]
 	})
 	return Workspace{
-		Title:    title,
-		Path:     relativeSlash(root, currentRoot),
-		Markdown: string(marker),
-		Files:    files,
+		Title:     title,
+		Path:      relativeSlash(root, currentRoot),
+		Markdown:  string(marker),
+		Files:     files,
+		HasMarker: hasMarker,
 	}, nil
 }
 
 func existingFile(runtimeRoot, jadePath, filePath string) (string, error) {
-	currentRoot, err := jadeDirectory(runtimeRoot, jadePath)
+	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
 	if err != nil {
 		return "", err
 	}
@@ -266,7 +273,7 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 	if len([]byte(contents)) > maximumTextBytes {
 		return errors.New("file is too large")
 	}
-	currentRoot, err := jadeDirectory(runtimeRoot, jadePath)
+	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
 	if err != nil {
 		return err
 	}

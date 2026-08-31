@@ -66,11 +66,12 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 	page := recorder.Body.String()
 	for _, expected := range []string{
 		`aria-label="Files"`,
-		`id="terminal-panel" hidden`,
+		`id="terminal-toggle"`,
 		`id="publish-dialog"`,
+		`<option value="arxiv">arXiv</option>`,
 		`id="document" class="jade-open"`,
 		`data-jade="inner"`,
-		`class="brand">JaDE</span>`,
+		`class="brand">JADE</span>`,
 		`rel="icon"`,
 		`🐉`,
 	} {
@@ -78,7 +79,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 			t.Fatalf("page = %d, missing %q:\n%s", recorder.Code, expected, page)
 		}
 	}
-	for _, removed := range []string{"Run:", "sh command in this JaDE", ">Open</button>", ">Save</button>"} {
+	for _, removed := range []string{"@xterm", `id="terminal-panel"`, "Run:", "sh command in this JaDE", ">Open</button>", ">Save</button>"} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("obsolete control %q remains", removed)
 		}
@@ -111,6 +112,33 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 	}
 	if !file.IsJade || file.ViewURL != "/view?jade=.&file=out.txt" {
 		t.Fatalf("jade.md response = %#v", file)
+	}
+}
+
+func TestPlainRepositoryOpensWithoutJadeMarker(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
+	application, err := newApp(root, 7333)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Host = "127.0.0.1:7333"
+	recorder := httptest.NewRecorder()
+	application.handler().ServeHTTP(recorder, request)
+	page := recorder.Body.String()
+	if recorder.Code != http.StatusOK || !strings.Contains(page, `data-file="main.go"`) || !strings.Contains(page, "package main") {
+		t.Fatalf("plain repository = %d:\n%s", recorder.Code, page)
+	}
+}
+
+func TestAppScriptBridgesTerminalToNativeShell(t *testing.T) {
+	request := httptest.NewRequest(http.MethodGet, "/app.js", nil)
+	request.Host = "127.0.0.1:7333"
+	response := httptest.NewRecorder()
+	testApp(t).handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `window.webkit.messageHandlers.jade.postMessage`) {
+		t.Fatalf("native terminal bridge = %d: %s", response.Code, response.Body.String())
 	}
 }
 
