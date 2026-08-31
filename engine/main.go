@@ -243,6 +243,7 @@ const appScript = `(() => {
     link.addEventListener("click", event => { event.preventDefault(); openFile(link); });
   });
   restoreCursor();
+  editor.focus();
   editor.addEventListener("input", () => setDirty(true));
   editor.addEventListener("keydown", event => {
     if (event.key === "Tab" && !event.shiftKey) {

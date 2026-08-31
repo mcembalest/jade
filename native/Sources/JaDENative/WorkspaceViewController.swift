@@ -50,6 +50,7 @@ final class WorkspaceViewController: NSViewController, WKScriptMessageHandler {
     override func viewDidAppear() {
         super.viewDidAppear()
         view.window?.title = root.lastPathComponent + " — JaDE"
+        view.window?.makeFirstResponder(webView)
     }
 
     override func viewDidLayout() {
@@ -146,5 +147,6 @@ extension WorkspaceViewController: TerminalSurfaceTitleDelegate, TerminalSurface
         terminalView = nil
         terminalController = nil
         ptySession = nil
+        view.window?.makeFirstResponder(webView)
     }
 }
