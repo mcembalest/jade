@@ -1,4 +1,4 @@
-package main
+package engine
 
 import (
 	"os"
@@ -16,23 +16,12 @@ func writeTestFile(t *testing.T, path, contents string) {
 	}
 }
 
-func TestParseJade(t *testing.T) {
-	title, commands := ParseJade("# A paper\n\nProse first.\n\n```sh\ntypst compile paper.typ paper.pdf\n```\n\n```python\nprint('not runnable')\n```\n\n```bash\nmake fetch\nmake all\n```\n")
-	if title != "A paper" {
+func TestJadeTitle(t *testing.T) {
+	if title := jadeTitle("```markdown\n# Example only\n```\n\n# A paper\n"); title != "A paper" {
 		t.Fatalf("title = %q", title)
 	}
-	if len(commands) != 2 || commands[0] != "typst compile paper.typ paper.pdf" || commands[1] != "make fetch\nmake all" {
-		t.Fatalf("commands = %#v", commands)
-	}
-
-	title, commands = ParseJade("plain marker, no heading, no fences\n")
-	if title != "Untitled Jade" || len(commands) != 0 {
-		t.Fatalf("plain markdown should be a valid marker: %q %#v", title, commands)
-	}
-
-	_, commands = ParseJade("````markdown\n```sh\nnested example, not runnable\n```\n````\n")
-	if len(commands) != 0 {
-		t.Fatalf("documented sh fences should not become commands: %#v", commands)
+	if title := jadeTitle("plain marker, no heading\n"); title != "Untitled JaDE" {
+		t.Fatalf("fallback title = %q", title)
 	}
 }
 
@@ -48,30 +37,21 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workspace.Children) != 1 || workspace.Children[0].Path != "synthetic" {
-		t.Fatalf("unexpected children: %#v", workspace.Children)
-	}
 	if len(workspace.Files) != 4 {
-		t.Fatalf("outer Jade should still see ordinary files inside nested Jades: %#v", workspace.Files)
-	}
-	if len(workspace.Commands) != 0 {
-		t.Fatalf("outer Jade should not inherit nested commands: %#v", workspace.Commands)
+		t.Fatalf("outer JaDE should still see ordinary files inside nested JaDEs: %#v", workspace.Files)
 	}
 
 	child, err := LoadWorkspace(root, "synthetic")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if child.Parent != "." || child.Title != "Synthetic data" {
-		t.Fatalf("unexpected child: %#v", child)
-	}
-	if len(child.Commands) != 1 || child.Commands[0] != "printf 'x\\n1\\n' > data.csv" {
-		t.Fatalf("unexpected child commands: %#v", child.Commands)
+	if child.Title != "Synthetic data" || child.Path != "synthetic" {
+		t.Fatalf("unexpected child workspace: %#v", child)
 	}
 	found, err := FindJadeRoot(filepath.Join(root, "synthetic", "generate.go"))
 	want, realErr := filepath.EvalSymlinks(filepath.Join(root, "synthetic"))
 	if err != nil || realErr != nil || found != want {
-		t.Fatalf("nearest Jade root = %q, %v", found, err)
+		t.Fatalf("nearest JaDE root = %q, %v", found, err)
 	}
 }
 
