@@ -3,21 +3,31 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let engine = EngineProcess()
-    private var statusItem: NSStatusItem!
+    private var statusItem: NSStatusItem?
     private var currentRoot: URL?
     private var windowController: NSWindowController?
-    private var reopenItem: NSMenuItem!
+    private var reopenItem: NSMenuItem?
+    private var pendingURL: URL?
+    private var finishedLaunching = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMenuBar()
+        finishedLaunching = true
         let arguments = Array(ProcessInfo.processInfo.arguments.dropFirst())
         if let first = arguments.first, !first.hasPrefix("-") {
             openWorkspace(URL(fileURLWithPath: first))
+        } else if let pending = pendingURL {
+            pendingURL = nil
+            openWorkspace(pending)
         }
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
         guard let url = urls.first else { return }
+        guard finishedLaunching else {
+            pendingURL = url
+            return
+        }
         openWorkspace(url)
     }
 
@@ -26,23 +36,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func configureMenuBar() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        statusItem.button?.title = "◆"
-        statusItem.button?.toolTip = "JaDE"
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = item
+        item.button?.title = "◆"
+        item.button?.toolTip = "JaDE"
 
         let menu = NSMenu()
         let openItem = NSMenuItem(title: "Open folder…", action: #selector(chooseFolder), keyEquivalent: "o")
         openItem.target = self
         menu.addItem(openItem)
-        reopenItem = NSMenuItem(title: "Open current workspace", action: #selector(reopenWorkspace), keyEquivalent: "")
-        reopenItem.target = self
-        reopenItem.isEnabled = false
-        menu.addItem(reopenItem)
+        let reopen = NSMenuItem(title: "Open current workspace", action: #selector(reopenWorkspace), keyEquivalent: "")
+        reopen.target = self
+        reopen.isEnabled = false
+        reopenItem = reopen
+        menu.addItem(reopen)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(title: "Quit JaDE", action: #selector(quit), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
-        statusItem.menu = menu
+        item.menu = menu
     }
 
     @objc private func chooseFolder() {
@@ -75,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = workspaceRoot(selected)
         currentRoot = root
         reopenItem?.isEnabled = true
-        statusItem.button?.toolTip = "JaDE — \(root.lastPathComponent)"
+        statusItem?.button?.toolTip = "JaDE — \(root.lastPathComponent)"
         windowController?.close()
         windowController = nil
         engine.start(root: root) { [weak self] result in
