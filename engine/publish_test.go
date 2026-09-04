@@ -3,6 +3,7 @@ package engine
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -45,7 +46,7 @@ func TestRepositoryStateAllowsParentRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := application.repositoryState(".")
+	state, err := application.repositoryState(context.Background(), ".")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +74,7 @@ func TestRepositoryStateRecognizesNestedRepoWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	state, err := application.repositoryState("parallel")
+	state, err := application.repositoryState(context.Background(), "parallel")
 	if err != nil {
 		t.Fatal(err)
 	}

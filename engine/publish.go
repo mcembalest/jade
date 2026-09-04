@@ -90,12 +90,12 @@ func absoluteGitPath(repoRoot, path string) string {
 	return filepath.Clean(filepath.Join(repoRoot, path))
 }
 
-func (a *app) repositoryState(jadePath string) (repositoryState, error) {
+func (a *app) repositoryState(ctx context.Context, jadePath string) (repositoryState, error) {
 	jadeRoot, err := workspaceDirectory(a.root, jadePath)
 	if err != nil {
 		return repositoryState{}, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
+	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 	repoRoot, err := gitOutput(ctx, jadeRoot, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -156,7 +156,7 @@ func (a *app) publishStatus(response http.ResponseWriter, request *http.Request)
 		writeJSON(response, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	state, err := a.repositoryState(queryPath(request, "jade", "."))
+	state, err := a.repositoryState(request.Context(), queryPath(request, "jade", "."))
 	if err != nil {
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -171,7 +171,7 @@ func (a *app) publishGitHub(response http.ResponseWriter, request *http.Request)
 	if request.Method != http.MethodPost || !parseForm(response, request) {
 		return
 	}
-	state, err := a.repositoryState(request.FormValue("jade"))
+	state, err := a.repositoryState(request.Context(), request.FormValue("jade"))
 	if err != nil {
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

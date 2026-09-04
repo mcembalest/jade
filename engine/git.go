@@ -12,12 +12,12 @@ type branchState struct {
 	Branches []string `json:"branches"`
 }
 
-func (a *app) repositoryBranches(jadePath string) (branchState, string, error) {
+func (a *app) repositoryBranches(ctx context.Context, jadePath string) (branchState, string, error) {
 	workspace, err := workspaceDirectory(a.root, jadePath)
 	if err != nil {
 		return branchState{}, "", err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), publishTimeout)
+	ctx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 	repository, err := gitOutput(ctx, workspace, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -42,7 +42,7 @@ func (a *app) branches(response http.ResponseWriter, request *http.Request) {
 		writeJSON(response, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
-	state, _, err := a.repositoryBranches(queryPath(request, "jade", "."))
+	state, _, err := a.repositoryBranches(request.Context(), queryPath(request, "jade", "."))
 	if err != nil {
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -54,7 +54,7 @@ func (a *app) switchBranch(response http.ResponseWriter, request *http.Request) 
 	if request.Method != http.MethodPost || !parseForm(response, request) {
 		return
 	}
-	state, repository, err := a.repositoryBranches(request.FormValue("jade"))
+	state, repository, err := a.repositoryBranches(request.Context(), request.FormValue("jade"))
 	branch := request.FormValue("branch")
 	if err == nil {
 		found := false
