@@ -136,7 +136,7 @@ func TestAppScriptUsesTerminalEndpoint(t *testing.T) {
 	request.Host = "127.0.0.1:7333"
 	response := httptest.NewRecorder()
 	testApp(t).handler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `fetch("/terminal",`) || strings.Contains(response.Body.String(), `window.webkit`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"/terminal"`) || strings.Contains(response.Body.String(), `window.webkit`) {
 		t.Fatalf("terminal endpoint = %d: %s", response.Code, response.Body.String())
 	}
 }
@@ -144,7 +144,7 @@ func TestAppScriptUsesTerminalEndpoint(t *testing.T) {
 func TestSaveAndCreateUsePlainFiles(t *testing.T) {
 	application := testApp(t)
 	handler := application.handler()
-	form := url.Values{"jade": {"."}, "file": {"notes.go"}, "content": {"package changed\n"}}
+	form := url.Values{"jade": {"."}, "file": {"notes.go"}, "content": {"package changed\n"}, "revision": {fileRevision("package notes\n")}}
 	response := postForm(handler, "/save", "127.0.0.1:7333", "http://127.0.0.1:7333", form)
 	if response.Code != http.StatusOK {
 		t.Fatalf("save = %d: %s", response.Code, response.Body.String())

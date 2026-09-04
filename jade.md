@@ -2,13 +2,59 @@
 
 JaDE (Just a Development Environment) is for thinking, working, coding, visualizing, writing, and publishing.
 
-## Install (requires Go, uv, and Apple Command Line Tools)
+## Install
+
+JaDE currently targets macOS. The browser editor and Go engine are bundled into one executable; running it needs no Node, Swift, uv, or separate app installation.
+
+With Go installed:
+
+```sh
+go install github.com/mcembalest/jade/cmd/jade@main
+jade /path/to/project
+```
+
+Make sure Go's binary directory (normally `~/go/bin`) is on your `PATH`.
+
+Or use the development Homebrew formula:
+
+```sh
+brew tap mcembalest/jade https://github.com/mcembalest/jade
+brew install --HEAD mcembalest/jade/jade
+```
+
+These install the current development branch; there is no tagged stable release yet.
+
+`jade` opens the current folder in your browser. It listens only on loopback, chooses an available port, and keeps running in the launching terminal. Save your edits before stopping it with Ctrl+C. Use `jade --no-open [folder]` to print the address without opening a browser, or `--address 127.0.0.1:7333` for a fixed port. `jade.md` is optional.
+
+### Optional Mac window
+
+From a checkout, with Go, uv, and Apple Command Line Tools installed:
 
 ```sh
 uv run native/install.py
+jade --native /path/to/project
 ```
 
-Run `jade` to keep JaDE in the macOS menu bar, then choose **Open folder…** for any repository or directory. Run `jade /path/to/repo` to open one directly; `jade.md` is optional.
+The optional app supplies a native window and menu-bar folder picker. Its close, quit, and workspace-switch actions wait for a successful save.
+
+## Editing
+
+CodeMirror provides undo/redo, indentation, search/replace (⌘F), and highlighting for Markdown, Python, JavaScript/TypeScript, and Go. Undo history is kept separately for each file while the page is open.
+
+JaDE autosaves after a short pause and saves before navigating. Saves check the disk revision and replace the file atomically. If another tool changes or deletes a file, JaDE retains conflicting local edits for you to download or discard explicitly. Unmodified open files refresh from disk; use **Refresh files** to update the file tree after external additions, renames, or deletions.
+
+Unsaved text is held in the open editor, not a crash-recovery store. Browser closing warns about unsaved changes; abrupt process or browser termination can still lose them.
+
+## Development
+
+```sh
+npm ci
+npm run build
+go test -race ./...
+go run ./cmd/jade --no-open .
+```
+
+Frontend sources live in `engine/web`. Commit the generated `editor.bundle.js` and third-party notices after frontend changes so `go install` works without a JavaScript build step. Runtime assets are served locally; dependency licenses are available at `/licenses.txt`.
 
 ## Design idea
 
@@ -28,7 +74,7 @@ repository/
     └── work
 ```
 
-Each inner JaDE owns its working directory. The Go engine handles files, terminal launching, and the local HTTP interface; the native macOS shell hosts that interface. There are no embedded terminal dependencies.
+Each inner JaDE owns its working directory. The Go engine handles files, terminal launching, and the local HTTP interface; your browser or the optional native macOS shell hosts that interface. There are no embedded terminal dependencies.
 
 The header’s terminal dropdown lists installed apps (including Terminal and Ghostty). **Open terminal** (⌘J) opens the selected app at the active workspace directory. The choice is saved across app restarts and workspaces. Without a saved choice, JaDE detects an installed alternative, or uses Terminal. `JADE_TERMINAL` overrides the choice with an app name or path, such as `Ghostty` or `/Applications/Ghostty.app`; it is never interpreted as a shell command. If launching the selected app fails, JaDE falls back to macOS Terminal.
 

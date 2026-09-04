@@ -1,7 +1,7 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let engine = EngineProcess()
     private var statusItem: NSStatusItem?
     private var currentRoot: URL?
@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reopenItem: NSMenuItem?
     private var pendingURL: URL?
     private var finishedLaunching = false
+    private var closingAfterSave = false
+    private var closePending = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureMenuBar()
@@ -87,27 +89,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let workspace = windowController?.contentViewController as? WorkspaceViewController else {
             return .terminateNow
         }
-        workspace.flushEditor {
-            sender.reply(toApplicationShouldTerminate: true)
+        workspace.flushEditor { success in
+            sender.reply(toApplicationShouldTerminate: success)
         }
         return .terminateLater
     }
 
     private func openWorkspace(_ selected: URL) {
         let root = workspaceRoot(selected)
-        currentRoot = root
-        reopenItem?.isEnabled = true
-        statusItem?.button?.toolTip = "JaDE — \(root.lastPathComponent)"
         if let workspace = windowController?.contentViewController as? WorkspaceViewController {
-            workspace.flushEditor { [weak self] in
-                self?.closeWorkspaceAndStart(root: root)
+            workspace.flushEditor { [weak self] success in
+                if success { self?.closeWorkspaceAndStart(root: root) }
             }
         } else {
             closeWorkspaceAndStart(root: root)
         }
     }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if closingAfterSave { return true }
+        guard !closePending,
+              let workspace = sender.contentViewController as? WorkspaceViewController else { return false }
+        closePending = true
+        workspace.flushEditor { [weak self, weak sender] success in
+            guard let self else { return }
+            self.closePending = false
+            if success {
+                self.closingAfterSave = true
+                sender?.performClose(nil)
+                self.closingAfterSave = false
+            }
+        }
+        return false
+    }
+
     private func closeWorkspaceAndStart(root: URL) {
+        currentRoot = root
+        reopenItem?.isEnabled = true
+        statusItem?.button?.toolTip = "JaDE — \(root.lastPathComponent)"
         windowController?.close()
         windowController = nil
         engine.start(root: root) { [weak self] result in
@@ -124,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentWorkspace(root: URL, baseURL: URL) {
         let content = WorkspaceViewController(root: root, baseURL: baseURL)
         let window = NSWindow(contentViewController: content)
+        window.delegate = self
         window.title = root.lastPathComponent + " — JaDE"
         window.setContentSize(NSSize(width: 1240, height: 820))
         window.minSize = NSSize(width: 760, height: 520)

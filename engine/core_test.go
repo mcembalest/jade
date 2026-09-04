@@ -79,24 +79,24 @@ func TestFilesStayInsideTheCurrentJade(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := WriteWorkspaceFile(root, ".", "notes/today.md", "hello"); err != nil {
+	if err := CreateWorkspaceFile(root, ".", "notes/today.md", "hello"); err != nil {
 		t.Fatal(err)
 	}
 	contents, err := ReadWorkspaceFile(root, ".", "notes/today.md")
 	if err != nil || contents != "hello" {
 		t.Fatalf("read = %q, %v", contents, err)
 	}
-	if err := WriteWorkspaceFile(root, ".", "../outside.md", "no"); err == nil {
+	if err := CreateWorkspaceFile(root, ".", "../outside.md", "no"); err == nil {
 		t.Fatal("expected traversal to fail")
 	}
-	if err := WriteWorkspaceFile(root, ".", "escape/outside.md", "no"); err == nil {
+	if err := CreateWorkspaceFile(root, ".", "escape/outside.md", "no"); err == nil {
 		t.Fatal("expected symlink escape to fail")
 	}
 	writeTestFile(t, filepath.Join(outside, "target.md"), "outside")
 	if err := os.Symlink(filepath.Join(outside, "target.md"), filepath.Join(root, "linked.md")); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteWorkspaceFile(root, ".", "linked.md", "no"); err == nil {
+	if err := CreateWorkspaceFile(root, ".", "linked.md", "no"); err == nil {
 		t.Fatal("expected write through a file symlink to fail")
 	}
 }

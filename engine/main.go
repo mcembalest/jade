@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -36,6 +37,8 @@ type pageData struct {
 	Workspace Workspace
 	Selected  string
 	Contents  string
+	Revision  string
+	CRLF      bool
 	Files     []*fileNode
 	IsJade    bool
 	View      string
@@ -48,6 +51,12 @@ type app struct {
 	page     *template.Template
 	hosts    map[string]bool
 }
+
+//go:embed web/editor.bundle.js
+var appScript string
+
+//go:embed web/THIRD_PARTY_NOTICES.txt
+var thirdPartyNotices string
 
 const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details open><summary>{{.Name}}{{if .Jade}}<span class="jade-mark">JaDE</span>{{end}}</summary><ul>{{template "tree" .Children}}</ul></details></li>{{else}}<li><a href="{{.URL}}" data-file="{{.Path}}" data-jade="{{.JadePath}}" class="file-link {{if .Jade}}jade-file{{end}}">{{.Name}}</a></li>{{end}}{{end}}{{end}}<!doctype html>
 <html lang="en">
@@ -76,7 +85,8 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     #shell { height:calc(100% - 48px); display:grid; grid-template-columns:236px minmax(0,1fr); }
     aside { min-width:0; overflow:auto; border-right:1px solid var(--line); background:var(--panel); }
     .explorer-head { position:sticky; top:0; z-index:1; height:38px; display:flex; align-items:center; padding:0 7px 0 14px; border-bottom:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:10px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
-    .explorer-head button { margin-left:auto; padding:0; width:25px; min-height:25px; border:0; background:transparent; font-size:17px; line-height:1; }
+    #refresh-files { margin-left:auto; }
+    .explorer-head button { padding:0; width:25px; min-height:25px; border:0; background:transparent; font-size:17px; line-height:1; }
     .tree, .tree ul { margin:0; padding:0; list-style:none; }
     .tree { padding:6px 0 12px; }
     .tree ul { padding-left:11px; }
@@ -94,11 +104,18 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     #document.jade-open { grid-template-columns:minmax(320px,1fr) minmax(360px,1fr); }
     #editor-form, #resolved { min-width:0; min-height:0; display:flex; flex-direction:column; }
     #resolved { border-left:1px solid var(--line); }
-    .filebar { height:38px; flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--paper); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #save-status { margin-left:auto; color:var(--muted); font:11px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
-    textarea { width:100%; min-height:0; flex:1; resize:none; border:0; padding:20px clamp(20px,4vw,56px); color:#151c18; background:var(--paper); tab-size:2; outline:0; font:13px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .filebar { min-height:38px; flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--paper); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; }
+    #save-status { margin-left:auto; flex:1 1 140px; text-align:right; overflow-wrap:anywhere; color:var(--muted); font:11px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
+    #editor { min-height:0; flex:1; overflow:hidden; }
+    #initial-content { display:none; }
+    .filebar button { font-size:11px; min-height:24px; padding:2px 6px; }
+
     #resolved[hidden] { display:none; }
     #view-frame { width:100%; min-height:0; flex:1; border:0; background:white; }
+    dialog { border:1px solid var(--line); border-radius:10px; padding:20px; }
+    dialog form, dialog label { display:grid; gap:12px; }
+    dialog input { min-width:260px; padding:8px; }
+    dialog::backdrop { background:#17201b4a; }
     @media (max-width:850px) {
       #shell { grid-template-columns:178px minmax(0,1fr); }
       .path { display:none; }
@@ -108,26 +125,28 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; transition:none!important; } }
   </style>
 </head>
-<body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}">
+<body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}" data-revision="{{.Revision}}" data-crlf="{{.CRLF}}">
   <header>
-    <div class="identity"><span class="brand">JADE</span><span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span></div>
-    <div class="header-actions">
+    <div class="identity">{{if ne .Workspace.Path "."}}<a id="workspace-root" href="/" title="Back to root workspace">JADE</a>{{else}}<span class="brand">JADE</span>{{end}}<span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span></div>
+    <div class="header-actions"><span id="terminal-status" role="status"></span>
       <select id="terminal-select" aria-label="Terminal app" title="Terminal app"><option>Terminal</option></select>
       <button id="terminal-toggle" type="button">Open terminal</button>
     </div>
   </header>
   <div id="shell">
     <aside aria-label="Files">
-      <div class="explorer-head">Files <button id="new-file" type="button" title="New file" aria-label="New file">+</button></div>
+      <div class="explorer-head">Files <button id="refresh-files" type="button" title="Refresh files" aria-label="Refresh files">↻</button><button id="new-file" type="button" title="New file" aria-label="New file">+</button></div>
       <ul class="tree">{{template "tree" .Files}}</ul>
     </aside>
     <main id="workbench">
       <div id="document" class="{{if .IsJade}}jade-open{{end}}">
         <form id="editor-form" method="post" action="/save">
-          <div class="filebar"><span id="file-name">{{.Selected}}</span><span id="save-status" role="status">Saved</span></div>
+          <div class="filebar"><span id="file-name">{{.Selected}}</span><button id="reload-file" type="button" hidden>Reload from disk</button><button id="save-copy" type="button" hidden>Download my edits</button><span id="save-status" role="status">Saved</span></div>
           <input type="hidden" name="jade" value="{{.Workspace.Path}}">
           <input type="hidden" name="file" value="{{.Selected}}">
-          <textarea name="content" spellcheck="false" aria-label="Editor">{{.Contents}}</textarea>
+          <textarea id="initial-content" hidden>
+{{.Contents}}</textarea>
+          <div id="editor"></div>
         </form>
         <section id="resolved" {{if not .IsJade}}hidden{{end}}>
           <div class="filebar"><span id="view-name">{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}</span></div>
@@ -136,179 +155,15 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
       </div>
     </main>
   </div>
+  <dialog id="new-file-dialog">
+    <form id="new-file-form">
+      <label>New file path <input name="path" required autofocus autocomplete="off" placeholder="notes/draft.md"></label>
+      <div><button id="new-file-cancel" type="button">Cancel</button><button type="submit">Create file</button></div>
+    </form>
+  </dialog>
   <script src="/app.js" defer></script>
 </body>
 </html>`
-
-const appScript = `(() => {
-  const body = document.body;
-  const form = document.querySelector("#editor-form");
-  const editor = form.querySelector("textarea");
-  const fileInput = form.querySelector("input[name=file]");
-  const status = document.querySelector("#save-status");
-  const documentPane = document.querySelector("#document");
-  const resolved = document.querySelector("#resolved");
-  const viewFrame = document.querySelector("#view-frame");
-  const viewName = document.querySelector("#view-name");
-  let dirty = false;
-
-  function setDirty(value) {
-    dirty = value;
-    status.textContent = value ? "Edited" : "Saved";
-  }
-
-  function cursorKey(file) {
-    return "jade-cursor:" + body.dataset.jade + ":" + file;
-  }
-
-  function rememberCursor() {
-    sessionStorage.setItem(cursorKey(fileInput.value), String(editor.selectionStart));
-  }
-
-  function restoreCursor() {
-    const saved = sessionStorage.getItem(cursorKey(fileInput.value));
-    const position = Math.min(saved === null ? 0 : Number(saved), editor.value.length);
-    editor.setSelectionRange(position, position);
-    if (position === 0) editor.scrollTop = 0;
-  }
-
-  let saving = null;
-
-  async function performSave() {
-    status.textContent = "Saving…";
-    const snapshot = editor.value;
-    const response = await fetch("/save", {method:"POST", body:new FormData(form)});
-    if (!response.ok) { status.textContent = await response.text(); return false; }
-    const data = await response.json();
-    rememberCursor();
-    if (editor.value === snapshot) setDirty(false);
-    if (data.viewURL && fileInput.value === "jade.md") {
-      viewFrame.src = data.viewURL;
-      viewName.textContent = data.view || body.dataset.jade;
-    }
-    return true;
-  }
-
-  async function save() {
-    while (saving) await saving;
-    if (!dirty) return true;
-    saving = performSave();
-    try { return await saving; } finally { saving = null; }
-  }
-
-  async function openFile(link) {
-    if (link.dataset.jade !== body.dataset.jade) { location.href = link.href; return; }
-    if (!(await save())) return;
-    rememberCursor();
-    const url = new URL("/file", location.origin);
-    url.searchParams.set("jade", body.dataset.jade);
-    url.searchParams.set("file", link.dataset.file);
-    const response = await fetch(url);
-    if (!response.ok) { status.textContent = await response.text(); return; }
-    const data = await response.json();
-    editor.value = data.contents;
-    fileInput.value = data.selected;
-    body.dataset.file = data.selected;
-    restoreCursor();
-    document.querySelector("#file-name").textContent = data.selected;
-    document.querySelectorAll(".file-link.active").forEach(node => node.classList.remove("active"));
-    link.classList.add("active");
-    documentPane.classList.toggle("jade-open", data.isJade);
-    resolved.hidden = !data.isJade;
-    if (data.isJade) { viewFrame.src = data.viewURL; viewName.textContent = data.view || data.title; }
-    history.pushState({}, "", link.href);
-    setDirty(false);
-    editor.focus();
-  }
-
-  document.querySelectorAll(".file-link").forEach(link => {
-    if (link.dataset.file === body.dataset.file && link.dataset.jade === body.dataset.jade) link.classList.add("active");
-    link.addEventListener("click", event => { event.preventDefault(); openFile(link); });
-  });
-  restoreCursor();
-  editor.focus();
-  let autosaveTimer = 0;
-  editor.addEventListener("input", () => {
-    setDirty(true);
-    clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(save, 800);
-  });
-  window.__jadeFlush = () => { clearTimeout(autosaveTimer); return save(); };
-  editor.addEventListener("keydown", event => {
-    if (event.key === "Tab" && !event.shiftKey) {
-      event.preventDefault();
-      editor.setRangeText("\t", editor.selectionStart, editor.selectionEnd, "end");
-      setDirty(true);
-    }
-  });
-  form.addEventListener("submit", event => { event.preventDefault(); save(); });
-  addEventListener("keydown", event => {
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") { event.preventDefault(); openTerminal(); }
-  });
-  addEventListener("beforeunload", event => { rememberCursor(); if (dirty) { event.preventDefault(); event.returnValue = ""; } });
-  addEventListener("popstate", () => location.reload());
-
-  document.querySelector("#new-file").addEventListener("click", async () => {
-    const path = prompt("New file path");
-    if (!path || !(await save())) return;
-    const data = new FormData(); data.set("jade", body.dataset.jade); data.set("path", path);
-    const response = await fetch("/new", {method:"POST", body:data});
-    if (!response.ok) { status.textContent = await response.text(); return; }
-    location.href = await response.text();
-  });
-
-  const terminalToggle = document.querySelector("#terminal-toggle");
-  const terminalSelect = document.querySelector("#terminal-select");
-  function showTerminals(result) {
-    terminalSelect.replaceChildren(...result.apps.map(app => new Option(app.name, app.path)));
-    terminalSelect.value = result.selected;
-    terminalSelect.disabled = result.overridden;
-    terminalSelect.title = result.overridden ? "Set by JADE_TERMINAL" : "Terminal app";
-  }
-  async function loadTerminals() {
-    try {
-      const response = await fetch("/terminals");
-      if (response.ok) showTerminals(await response.json());
-    } catch (_) { /* Opening still uses the engine's default. */ }
-  }
-  terminalSelect.addEventListener("change", async () => {
-    terminalSelect.disabled = true;
-    terminalToggle.disabled = true;
-    try {
-      const data = new FormData(); data.set("terminal", terminalSelect.value);
-      const response = await fetch("/terminal/preference", {method:"POST", body:data});
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not save terminal preference");
-      showTerminals(result);
-    } catch (error) {
-      status.textContent = error.message;
-      terminalSelect.disabled = false;
-      await loadTerminals();
-    } finally {
-      terminalToggle.disabled = false;
-    }
-  });
-  async function openTerminal() {
-    if (terminalToggle.disabled) return;
-    terminalToggle.disabled = true;
-    terminalToggle.textContent = "Opening…";
-    try {
-      const data = new FormData(); data.set("jade", body.dataset.jade);
-      const response = await fetch("/terminal", {method:"POST", body:data});
-      const result = await response.json();
-      status.textContent = response.ok ? result.message : (result.error || "Could not open terminal");
-    } catch (error) {
-      status.textContent = "Could not open terminal: " + error.message;
-    } finally {
-      terminalToggle.disabled = false;
-      terminalToggle.textContent = "Open terminal";
-    }
-  }
-  terminalToggle.addEventListener("click", openTerminal);
-  loadTerminals();
-
-})();`
 
 func newApp(root string, port int) (*app, error) {
 	page, err := template.New("page").Parse(pageTemplate)
@@ -361,6 +216,10 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
 	mux.HandleFunc("/terminal", a.guard(a.terminal))
 	mux.HandleFunc("/app.js", a.guard(a.script))
+	mux.HandleFunc("/licenses.txt", a.guard(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		_, _ = io.WriteString(response, thirdPartyNotices)
+	}))
 	return mux
 }
 
@@ -505,8 +364,8 @@ func (a *app) defaultView(workspace Workspace) string {
 	return view
 }
 
-func (a *app) pageData(jadePath, selected, view string) (pageData, error) {
-	workspace, err := LoadWorkspace(a.root, jadePath)
+func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageData, error) {
+	workspace, err := loadWorkspace(a.root, jadePath, includeTree)
 	if err != nil {
 		return pageData{}, err
 	}
@@ -524,7 +383,7 @@ func (a *app) pageData(jadePath, selected, view string) (pageData, error) {
 			return pageData{}, err
 		}
 	}
-	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Files: buildFileTree(workspace), IsJade: selected == markerName}
+	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Revision: fileRevision(contents), CRLF: strings.Contains(contents, "\r\n"), Files: buildFileTree(workspace), IsJade: selected == markerName}
 	if !data.IsJade {
 		return data, nil
 	}
@@ -555,7 +414,7 @@ func (a *app) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"))
+	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"), true)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
@@ -573,16 +432,16 @@ func (a *app) file(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"))
+	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"), false)
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "isJade": data.IsJade, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
+	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "revision": data.Revision, "isJade": data.IsJade, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
 }
 
 func parseForm(response http.ResponseWriter, request *http.Request) bool {
-	request.Body = http.MaxBytesReader(response, request.Body, maximumTextBytes+64_000)
+	request.Body = http.MaxBytesReader(response, request.Body, maximumTextBytes*3+64_000)
 	if err := request.ParseMultipartForm(maximumTextBytes + 64_000); err != nil {
 		if err = request.ParseForm(); err != nil {
 			http.Error(response, err.Error(), http.StatusBadRequest)
@@ -593,20 +452,33 @@ func parseForm(response http.ResponseWriter, request *http.Request) bool {
 }
 
 func (a *app) save(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodPost || !parseForm(response, request) {
+	if request.Method != http.MethodPost {
+		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	jadePath, filePath := request.FormValue("jade"), request.FormValue("file")
-	if err := WriteWorkspaceFile(a.root, jadePath, filePath, request.FormValue("content")); err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
+	if !parseForm(response, request) {
 		return
 	}
-	data, err := a.pageData(jadePath, filePath, "")
+	revision := request.FormValue("revision")
+	if revision == "" {
+		http.Error(response, "reload the file before saving", http.StatusPreconditionRequired)
+		return
+	}
+	jadePath, filePath, contents := request.FormValue("jade"), request.FormValue("file"), request.FormValue("content")
+	err := updateWorkspaceFile(a.root, jadePath, filePath, contents, revision)
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
+		code := http.StatusBadRequest
+		if errors.Is(err, errFileChanged) || errors.Is(err, os.ErrNotExist) {
+			code = http.StatusConflict
+		}
+		message := err.Error()
+		if errors.Is(err, os.ErrPermission) {
+			message = "Cannot save here. Check the file and folder permissions, then try saving again."
+		}
+		http.Error(response, message, code)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"view": data.View, "viewURL": data.ViewURL})
+	writeJSON(response, http.StatusOK, map[string]string{"revision": fileRevision(contents)})
 }
 
 func (a *app) create(response http.ResponseWriter, request *http.Request) {
@@ -631,7 +503,7 @@ func (a *app) create(response http.ResponseWriter, request *http.Request) {
 		if filepath.Base(filePath) == markerName {
 			contents = "# Untitled JaDE\n"
 		}
-		err = WriteWorkspaceFile(a.root, jadePath, filePath, contents)
+		err = CreateWorkspaceFile(a.root, jadePath, filePath, contents)
 	}
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)

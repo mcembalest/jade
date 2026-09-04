@@ -12,7 +12,7 @@ From this inner JaDE:
 jade
 ```
 
-The native launcher appears as ◆ in the macOS menu bar. Choose any repository with **Open folder…**.
+The self-contained launcher opens this workspace in a browser. Use `jade --native .` for the optional Mac window.
 
 ## Verify
 
@@ -23,7 +23,7 @@ go test ./...
 ## Install
 
 ```sh
-uv run ../native/install.py
+go install github.com/mcembalest/jade/cmd/jade@main
 ```
 
 The module remains rooted one directory above so this repository can contain multiple inner JaDEs without duplicating dependency state. Go discovers that parent `go.mod` automatically.

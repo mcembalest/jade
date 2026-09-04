@@ -195,6 +195,10 @@ func scanWorkspace(root string) ([]string, error) {
 }
 
 func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
+	return loadWorkspace(runtimeRoot, jadePath, true)
+}
+
+func loadWorkspace(runtimeRoot, jadePath string, scan bool) (Workspace, error) {
 	root, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
 		return Workspace{}, err
@@ -212,9 +216,12 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 	if hasMarker {
 		title = jadeTitle(string(marker))
 	}
-	files, err := scanWorkspace(currentRoot)
-	if err != nil {
-		return Workspace{}, err
+	var files []string
+	if scan {
+		files, err = scanWorkspace(currentRoot)
+		if err != nil {
+			return Workspace{}, err
+		}
 	}
 	sort.Slice(files, func(i, j int) bool {
 		if files[i] == markerName {
@@ -269,7 +276,7 @@ func ReadWorkspaceFile(runtimeRoot, jadePath, filePath string) (string, error) {
 	return string(contents), err
 }
 
-func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error {
+func CreateWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error {
 	if len([]byte(contents)) > maximumTextBytes {
 		return errors.New("file is too large")
 	}
@@ -304,5 +311,14 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 	if err := os.MkdirAll(filepath.Dir(candidate), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(candidate, []byte(contents), 0o644)
+	file, err := os.OpenFile(candidate, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	_, writeErr := file.WriteString(contents)
+	closeErr := file.Close()
+	if writeErr != nil {
+		return writeErr
+	}
+	return closeErr
 }
