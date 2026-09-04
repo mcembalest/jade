@@ -1,7 +1,6 @@
-package main
+package engine
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
@@ -19,73 +18,46 @@ const (
 	maximumTextBytes = 5_000_000
 )
 
-var ignoredDirectories = map[string]bool{".git": true, ".pixi": true, "node_modules": true}
-
-type ChildJade struct {
-	Path  string
-	Title string
+var ignoredDirectories = map[string]bool{
+	".build":       true,
+	".deps":        true,
+	".pixi":        true,
+	".tmp":         true,
+	"node_modules": true,
 }
 
 type Workspace struct {
-	Title    string
-	Commands []string
-	Path     string
-	Parent   string
-	Markdown string
-	Files    []string
-	Children []ChildJade
+	Title     string
+	Path      string
+	Markdown  string
+	Files     []string
+	HasMarker bool
 }
 
-// ParseJade extracts the first top-level heading and the fenced sh blocks
-// from a jade.md. Any Markdown is a valid marker.
-func ParseJade(markdown string) (string, []string) {
-	title := "Untitled Jade"
-	titleFound := false
-	var commands []string
-	var block []string
-	inFence, capture := false, false
-	scanner := bufio.NewScanner(strings.NewReader(markdown))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		line := strings.TrimSuffix(scanner.Text(), "\r")
-		trimmed := strings.TrimLeft(line, " \t")
+func jadeTitle(markdown string) string {
+	inFence := false
+	for _, line := range strings.Split(markdown, "\n") {
+		trimmed := strings.TrimLeft(strings.TrimSuffix(line, "\r"), " \t")
 		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			if inFence {
-				if capture {
-					if command := strings.TrimSpace(strings.Join(block, "\n")); command != "" {
-						commands = append(commands, command)
-					}
-				}
-				inFence, capture, block = false, false, nil
-				continue
-			}
-			language := strings.ToLower(strings.TrimSpace(strings.TrimLeft(trimmed, "`~")))
-			inFence = true
-			capture = language == "sh" || language == "bash" || language == "shell"
+			inFence = !inFence
 			continue
 		}
-		if inFence {
-			if capture {
-				block = append(block, line)
-			}
-			continue
-		}
-		if !titleFound && strings.HasPrefix(line, "# ") {
-			if heading := strings.TrimSpace(strings.TrimPrefix(line, "# ")); heading != "" {
-				title, titleFound = heading, true
+		if !inFence && strings.HasPrefix(line, "# ") {
+			if title := strings.TrimSpace(strings.TrimPrefix(line, "# ")); title != "" {
+				return title
 			}
 		}
 	}
-	return title, commands
+	return "Untitled JaDE"
 }
 
 func validateRelativePath(path string) error {
 	if path == "" || strings.ContainsRune(path, 0) || filepath.IsAbs(filepath.FromSlash(path)) {
-		return errors.New("path must be relative to its Jade")
+		return errors.New("path must be relative to its JaDE")
 	}
 	clean := filepath.Clean(filepath.FromSlash(path))
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return errors.New("path cannot leave its Jade")
+		return errors.New("path cannot leave its JaDE")
 	}
 	return nil
 }
@@ -101,12 +73,14 @@ func safeJoin(root, path string) (string, error) {
 	}
 	candidate := filepath.Join(root, filepath.FromSlash(path))
 	if !within(root, candidate) {
-		return "", errors.New("path leaves its Jade")
+		return "", errors.New("path leaves its JaDE")
 	}
 	return candidate, nil
 }
 
-func FindJadeRoot(start string) (string, error) {
+// ResolveWorkspaceRoot resolves a folder or a file's containing folder.
+// A workspace is any directory; jade.md enriches one but never gates opening it.
+func ResolveWorkspaceRoot(start string) (string, error) {
 	absolute, err := filepath.Abs(start)
 	if err != nil {
 		return "", err
@@ -118,34 +92,21 @@ func FindJadeRoot(start string) (string, error) {
 	if !info.IsDir() {
 		absolute = filepath.Dir(absolute)
 	}
-	absolute, err = filepath.EvalSymlinks(absolute)
-	if err != nil {
-		return "", err
-	}
-	for {
-		if info, statErr := os.Stat(filepath.Join(absolute, markerName)); statErr == nil && info.Mode().IsRegular() {
-			return absolute, nil
-		}
-		parent := filepath.Dir(absolute)
-		if parent == absolute {
-			return "", fmt.Errorf("no %s found at or above %s", markerName, start)
-		}
-		absolute = parent
-	}
+	return filepath.EvalSymlinks(absolute)
 }
 
-func jadeDirectory(runtimeRoot, jadePath string) (string, error) {
+func workspaceDirectory(runtimeRoot, workspacePath string) (string, error) {
 	root, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
 		return "", err
 	}
-	if jadePath == "." {
-		jadePath = ""
+	if workspacePath == "." {
+		workspacePath = ""
 	}
 	var candidate string
-	if jadePath == "" {
+	if workspacePath == "" {
 		candidate = root
-	} else if candidate, err = safeJoin(root, jadePath); err != nil {
+	} else if candidate, err = safeJoin(root, workspacePath); err != nil {
 		return "", err
 	}
 	actual, err := filepath.EvalSymlinks(candidate)
@@ -153,11 +114,17 @@ func jadeDirectory(runtimeRoot, jadePath string) (string, error) {
 		return "", err
 	}
 	if !within(root, actual) {
-		return "", errors.New("Jade leaves the launched root")
+		return "", errors.New("workspace leaves the launched root")
 	}
-	info, err := os.Stat(filepath.Join(actual, markerName))
-	if err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("%s is not a Jade", jadePath)
+	info, err := os.Stat(actual)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("%s is not a workspace directory", workspacePath)
+	}
+	if actual != root {
+		marker, markerErr := os.Stat(filepath.Join(actual, markerName))
+		if markerErr != nil || !marker.Mode().IsRegular() {
+			return "", fmt.Errorf("%s is not an inner JaDE", workspacePath)
+		}
 	}
 	return actual, nil
 }
@@ -196,11 +163,17 @@ func editableText(path string, info fs.FileInfo) bool {
 	return utf8.Valid(prefix)
 }
 
-func scanWorkspace(root string) ([]string, []string, error) {
-	var files, jadeDirectories []string
+func scanWorkspace(root string) ([]string, error) {
+	var files []string
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if path != root && entry.Name() == ".git" {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if path != root && entry.IsDir() && ignoredDirectories[entry.Name()] {
 			return filepath.SkipDir
@@ -213,27 +186,12 @@ func scanWorkspace(root string) ([]string, []string, error) {
 			return err
 		}
 		rel := relativeSlash(root, path)
-		if entry.Name() == markerName && filepath.Dir(path) != root {
-			jadeDirectories = append(jadeDirectories, filepath.ToSlash(filepath.Dir(rel)))
-		}
 		if editableText(path, info) {
 			files = append(files, rel)
 		}
 		return nil
 	})
-	return files, jadeDirectories, err
-}
-
-func parentJade(runtimeRoot, currentRoot string) string {
-	for candidate := filepath.Dir(currentRoot); within(runtimeRoot, candidate); candidate = filepath.Dir(candidate) {
-		if info, err := os.Stat(filepath.Join(candidate, markerName)); err == nil && info.Mode().IsRegular() {
-			return relativeSlash(runtimeRoot, candidate)
-		}
-		if candidate == runtimeRoot {
-			break
-		}
-	}
-	return ""
+	return files, err
 }
 
 func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
@@ -241,30 +199,22 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, err
 	}
-	currentRoot, err := jadeDirectory(root, jadePath)
+	currentRoot, err := workspaceDirectory(root, jadePath)
 	if err != nil {
 		return Workspace{}, err
 	}
-	marker, err := os.ReadFile(filepath.Join(currentRoot, markerName))
+	marker, markerErr := os.ReadFile(filepath.Join(currentRoot, markerName))
+	hasMarker := markerErr == nil
+	if markerErr != nil && !errors.Is(markerErr, os.ErrNotExist) {
+		return Workspace{}, markerErr
+	}
+	title := filepath.Base(currentRoot)
+	if hasMarker {
+		title = jadeTitle(string(marker))
+	}
+	files, err := scanWorkspace(currentRoot)
 	if err != nil {
 		return Workspace{}, err
-	}
-	title, commands := ParseJade(string(marker))
-	files, jadeDirectories, err := scanWorkspace(currentRoot)
-	if err != nil {
-		return Workspace{}, err
-	}
-	children := make([]ChildJade, 0, len(jadeDirectories))
-	for _, path := range jadeDirectories {
-		contents, readErr := os.ReadFile(filepath.Join(currentRoot, filepath.FromSlash(path), markerName))
-		if readErr != nil {
-			return Workspace{}, readErr
-		}
-		childTitle, _ := ParseJade(string(contents))
-		children = append(children, ChildJade{
-			Path:  relativeSlash(root, filepath.Join(currentRoot, filepath.FromSlash(path))),
-			Title: childTitle,
-		})
 	}
 	sort.Slice(files, func(i, j int) bool {
 		if files[i] == markerName {
@@ -275,20 +225,17 @@ func LoadWorkspace(runtimeRoot, jadePath string) (Workspace, error) {
 		}
 		return files[i] < files[j]
 	})
-	sort.Slice(children, func(i, j int) bool { return children[i].Path < children[j].Path })
 	return Workspace{
-		Title:    title,
-		Commands: commands,
-		Path:     relativeSlash(root, currentRoot),
-		Parent:   parentJade(root, currentRoot),
-		Markdown: string(marker),
-		Files:    files,
-		Children: children,
+		Title:     title,
+		Path:      relativeSlash(root, currentRoot),
+		Markdown:  string(marker),
+		Files:     files,
+		HasMarker: hasMarker,
 	}, nil
 }
 
 func existingFile(runtimeRoot, jadePath, filePath string) (string, error) {
-	currentRoot, err := jadeDirectory(runtimeRoot, jadePath)
+	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
 	if err != nil {
 		return "", err
 	}
@@ -301,7 +248,7 @@ func existingFile(runtimeRoot, jadePath, filePath string) (string, error) {
 		return "", err
 	}
 	if !within(currentRoot, actual) {
-		return "", errors.New("file leaves its Jade")
+		return "", errors.New("file leaves its JaDE")
 	}
 	return actual, nil
 }
@@ -326,7 +273,7 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 	if len([]byte(contents)) > maximumTextBytes {
 		return errors.New("file is too large")
 	}
-	currentRoot, err := jadeDirectory(runtimeRoot, jadePath)
+	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
 	if err != nil {
 		return err
 	}
@@ -349,7 +296,7 @@ func WriteWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error 
 	}
 	actualAncestor, err := filepath.EvalSymlinks(ancestor)
 	if err != nil || !within(currentRoot, actualAncestor) {
-		return errors.New("file leaves its Jade")
+		return errors.New("file leaves its JaDE")
 	}
 	if info, lstatErr := os.Lstat(candidate); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
 		return errors.New("refusing to write through a symlink")
