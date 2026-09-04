@@ -28,9 +28,17 @@ repository/
     └── work
 ```
 
-Each inner JaDE owns its working directory and embedded libghostty terminal context. The Go engine remains responsible for files, Git, publishing, and the local HTTP interface; the native macOS shell hosts that interface and keeps terminal sessions alive across editor reloads. Publish uses the nearest repository for GitHub, prepares Markdown for Substack, and packages TeX/PDF/ZIP papers for arXiv’s interactive submission workflow.
+Each inner JaDE owns its working directory. The Go engine handles files, terminal launching, and the local HTTP interface; the native macOS shell hosts that interface. There are no embedded terminal dependencies.
 
-The header’s branch menu lists local Git branches and switches the active repository without leaving JaDE.
+The header’s terminal dropdown lists installed apps (including Terminal and Ghostty). **Open terminal** (⌘J) opens the selected app at the active workspace directory. The choice is saved across app restarts and workspaces. Without a saved choice, JaDE detects an installed alternative, or uses Terminal. `JADE_TERMINAL` overrides the choice with an app name or path, such as `Ghostty` or `/Applications/Ghostty.app`; it is never interpreted as a shell command. If launching the selected app fails, JaDE falls back to macOS Terminal.
+
+Use `git` and `gh` in your terminal for version control and GitHub workflows, including when working with agents.
+
+## Direction
+
+Focus on reliable text/file editing, nested project context, and rendered outputs. Prefer established dependencies when they reduce the behavior JaDE must maintain.
+
+Specialized subprojects with their own `jade.md` can eventually prepare arXiv-ready paper artifacts or Substack-ready Markdown. The long-term paper-writing goal is to make Overleaf unnecessary. These are future workflows, not built-in publishing integrations; JaDE currently neither builds submission packages nor publishes to those services. Richer integrations and IDE controls can wait until the core editing experience is dependable.
 
 ## Inspiration
 

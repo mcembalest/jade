@@ -31,7 +31,6 @@ def install() -> None:
     RESOURCES.mkdir(parents=True)
     shutil.copy2(BUILD / "JaDENative", MACOS / "JaDE")
     shutil.copy2(BUILD / "jade-engine", RESOURCES / "jade-engine")
-    shutil.copytree(BUILD / "GhosttyTerminal.bundle", RESOURCES / "GhosttyTerminal.bundle")
     os.chmod(MACOS / "JaDE", 0o755)
     os.chmod(RESOURCES / "jade-engine", 0o755)
 

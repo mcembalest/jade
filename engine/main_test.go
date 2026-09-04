@@ -67,8 +67,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 	for _, expected := range []string{
 		`aria-label="Files"`,
 		`id="terminal-toggle"`,
-		`id="publish-dialog"`,
-		`<option value="arxiv">arXiv</option>`,
+		`id="terminal-select"`,
 		`id="document" class="jade-open"`,
 		`data-jade="inner"`,
 		`class="brand">JADE</span>`,
@@ -79,7 +78,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 			t.Fatalf("page = %d, missing %q:\n%s", recorder.Code, expected, page)
 		}
 	}
-	for _, removed := range []string{"@xterm", `id="terminal-panel"`, "Run:", "sh command in this JaDE", ">Open</button>", ">Save</button>"} {
+	for _, removed := range []string{`id="publish-open"`, `id="publish-dialog"`, `id="branch-select"`, "@xterm", `id="terminal-panel"`, "Run:", "sh command in this JaDE", ">Open</button>", ">Save</button>"} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("obsolete control %q remains", removed)
 		}
@@ -132,13 +131,13 @@ func TestPlainRepositoryOpensWithoutJadeMarker(t *testing.T) {
 	}
 }
 
-func TestAppScriptBridgesTerminalToNativeShell(t *testing.T) {
+func TestAppScriptUsesTerminalEndpoint(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/app.js", nil)
 	request.Host = "127.0.0.1:7333"
 	response := httptest.NewRecorder()
 	testApp(t).handler().ServeHTTP(response, request)
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `window.webkit.messageHandlers.jade.postMessage`) {
-		t.Fatalf("native terminal bridge = %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `fetch("/terminal",`) || strings.Contains(response.Body.String(), `window.webkit`) {
+		t.Fatalf("terminal endpoint = %d: %s", response.Code, response.Body.String())
 	}
 }
 

@@ -52,7 +52,7 @@ func main() {
 	case err := <-served:
 		log.Fatal(err)
 	case <-ctx.Done():
-		// BaseContext cancellation kills in-flight git/gh/osascript children
+		// BaseContext cancellation stops in-flight child commands
 		// via exec.CommandContext; Shutdown then waits for handlers to return.
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

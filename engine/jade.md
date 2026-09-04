@@ -2,7 +2,7 @@
 
 The Go engine is an inner JaDE. Its implementation files open like an ordinary IDE; selecting this `jade.md` resolves [main.go](main.go) beside the source.
 
-The filesystem boundary and safety rules live in [core.go](core.go), the native terminal bridge in `../native`, and GitHub/Substack/arXiv publishing in [publish.go](publish.go).
+The filesystem boundary and safety rules live in [core.go](core.go), the editor and HTTP interface in [main.go](main.go), and external terminal discovery and launching in [terminal.go](terminal.go). The native window shell lives in `../native`. Git and publishing workflows use external tools.
 
 ## Run
 

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"html/template"
 	"io"
@@ -64,17 +65,13 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     button { min-height:30px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; padding:.34rem .68rem; cursor:pointer; }
     button:hover { border-color:#aeb9b2; background:#f8faf9; }
     button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid #38a172; outline-offset:2px; }
-    button.primary { color:white; border-color:var(--jade); background:var(--jade); }
-    button.primary:hover { background:#075b37; }
+    #terminal-select { max-width:140px; min-height:30px; border:1px solid var(--line); border-radius:7px; background:var(--paper); color:var(--ink); }
     button:disabled { cursor:not-allowed; opacity:.45; }
     header { height:48px; display:flex; align-items:center; padding:0 12px 0 14px; border-bottom:1px solid var(--line); background:var(--paper); }
     .identity { min-width:0; display:flex; align-items:center; gap:8px; }
     .brand { color:var(--jade); font-size:12px; font-weight:800; letter-spacing:.12em; }
     .project { min-width:0; overflow:hidden; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
     .path { min-width:0; overflow:hidden; color:var(--muted); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow:ellipsis; white-space:nowrap; }
-    .branch-control { display:flex; align-items:center; gap:5px; margin-left:4px; padding-left:10px; border-left:1px solid var(--line); color:var(--muted); font-size:10px; }
-    .branch-control[hidden] { display:none; }
-    .branch-control select { max-width:180px; height:28px; border:0; border-radius:6px; padding:0 24px 0 6px; color:#26322b; background:#f2f5f3; font:11px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace; }
     .header-actions { display:flex; gap:6px; margin-left:auto; padding-left:12px; }
     #shell { height:calc(100% - 48px); display:grid; grid-template-columns:236px minmax(0,1fr); }
     aside { min-width:0; overflow:auto; border-right:1px solid var(--line); background:var(--panel); }
@@ -102,19 +99,6 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     textarea { width:100%; min-height:0; flex:1; resize:none; border:0; padding:20px clamp(20px,4vw,56px); color:#151c18; background:var(--paper); tab-size:2; outline:0; font:13px/1.62 ui-monospace,SFMono-Regular,Menlo,monospace; }
     #resolved[hidden] { display:none; }
     #view-frame { width:100%; min-height:0; flex:1; border:0; background:white; }
-    dialog { width:min(540px,calc(100vw - 28px)); padding:0; border:1px solid #aeb8b1; border-radius:12px; background:var(--paper); box-shadow:0 20px 70px #1020182b; }
-    dialog::backdrop { background:#17201b4a; backdrop-filter:blur(2px); }
-    .modal-head, .modal-actions { display:flex; align-items:center; gap:8px; padding:12px 14px; }
-    .modal-head { border-bottom:1px solid var(--line); }
-    .modal-head strong { font-size:14px; }
-    .modal-head button { margin-left:auto; border:0; background:transparent; font-size:17px; }
-    .modal-body { display:grid; gap:12px; padding:16px; }
-    .modal-body label { display:grid; gap:5px; color:var(--muted); font-size:11px; font-weight:600; }
-    .modal-body label[hidden] { display:none; }
-    .modal-body input, .modal-body select { width:100%; padding:8px 9px; border:1px solid var(--line); border-radius:7px; color:var(--ink); background:white; }
-    #publish-summary { min-height:76px; max-height:220px; overflow:auto; margin:0; padding:10px; border:1px solid var(--line); border-radius:7px; background:#f7f9f8; white-space:pre-wrap; font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #publish-note { min-height:18px; margin:0; color:var(--muted); font-size:11px; }
-    .modal-actions { justify-content:flex-end; border-top:1px solid var(--line); }
     @media (max-width:850px) {
       #shell { grid-template-columns:178px minmax(0,1fr); }
       .path { display:none; }
@@ -126,10 +110,10 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
 </head>
 <body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}">
   <header>
-    <div class="identity"><span class="brand">JADE</span><span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span><label class="branch-control" hidden><span>branch</span><select id="branch-select" aria-label="Git branch"></select></label></div>
+    <div class="identity"><span class="brand">JADE</span><span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span></div>
     <div class="header-actions">
+      <select id="terminal-select" aria-label="Terminal app" title="Terminal app"><option>Terminal</option></select>
       <button id="terminal-toggle" type="button">Open terminal</button>
-      <button id="publish-open" class="primary" type="button">Publish</button>
     </div>
   </header>
   <div id="shell">
@@ -152,16 +136,6 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
       </div>
     </main>
   </div>
-  <dialog id="publish-dialog">
-    <div class="modal-head"><strong>Publish</strong><button id="publish-close" type="button" aria-label="Close">×</button></div>
-    <div class="modal-body">
-      <label>Destination<select id="publish-destination"><option value="github">GitHub</option><option value="arxiv">arXiv</option><option value="substack">Substack</option></select></label>
-      <pre id="publish-summary">Checking the nearest repository…</pre>
-      <label id="commit-field">Commit message<input id="commit-message" value="Update from JaDE"></label>
-      <p id="publish-note" role="status"></p>
-    </div>
-    <div class="modal-actions"><button id="publish-cancel" type="button">Cancel</button><button id="publish-confirm" class="primary" type="button">Commit, push & open PR</button></div>
-  </dialog>
   <script src="/app.js" defer></script>
 </body>
 </html>`
@@ -285,124 +259,55 @@ const appScript = `(() => {
   });
 
   const terminalToggle = document.querySelector("#terminal-toggle");
-  async function openTerminal() {
-    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.jade) {
-      window.webkit.messageHandlers.jade.postMessage({type:"terminal", jade:body.dataset.jade});
-      status.textContent = "Terminal opened";
-      return;
+  const terminalSelect = document.querySelector("#terminal-select");
+  function showTerminals(result) {
+    terminalSelect.replaceChildren(...result.apps.map(app => new Option(app.name, app.path)));
+    terminalSelect.value = result.selected;
+    terminalSelect.disabled = result.overridden;
+    terminalSelect.title = result.overridden ? "Set by JADE_TERMINAL" : "Terminal app";
+  }
+  async function loadTerminals() {
+    try {
+      const response = await fetch("/terminals");
+      if (response.ok) showTerminals(await response.json());
+    } catch (_) { /* Opening still uses the engine's default. */ }
+  }
+  terminalSelect.addEventListener("change", async () => {
+    terminalSelect.disabled = true;
+    terminalToggle.disabled = true;
+    try {
+      const data = new FormData(); data.set("terminal", terminalSelect.value);
+      const response = await fetch("/terminal/preference", {method:"POST", body:data});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not save terminal preference");
+      showTerminals(result);
+    } catch (error) {
+      status.textContent = error.message;
+      terminalSelect.disabled = false;
+      await loadTerminals();
+    } finally {
+      terminalToggle.disabled = false;
     }
+  });
+  async function openTerminal() {
+    if (terminalToggle.disabled) return;
     terminalToggle.disabled = true;
     terminalToggle.textContent = "Opening…";
-    const data = new FormData();
-    data.set("jade", body.dataset.jade);
-    const response = await fetch("/terminal", {method:"POST", body:data});
-    const result = await response.json();
-    terminalToggle.disabled = false;
-    terminalToggle.textContent = "Open terminal";
-    status.textContent = response.ok ? "Terminal opened" : (result.error || "Could not open Ghostty");
+    try {
+      const data = new FormData(); data.set("jade", body.dataset.jade);
+      const response = await fetch("/terminal", {method:"POST", body:data});
+      const result = await response.json();
+      status.textContent = response.ok ? result.message : (result.error || "Could not open terminal");
+    } catch (error) {
+      status.textContent = "Could not open terminal: " + error.message;
+    } finally {
+      terminalToggle.disabled = false;
+      terminalToggle.textContent = "Open terminal";
+    }
   }
   terminalToggle.addEventListener("click", openTerminal);
+  loadTerminals();
 
-  const branchControl = document.querySelector(".branch-control");
-  const branchSelect = document.querySelector("#branch-select");
-  let currentBranch = "";
-  async function loadBranches() {
-    const response = await fetch("/git/branches?jade=" + encodeURIComponent(body.dataset.jade));
-    if (!response.ok) return;
-    const state = await response.json();
-    currentBranch = state.current;
-    branchSelect.replaceChildren(...state.branches.map(branch => {
-      const option = document.createElement("option");
-      option.value = branch; option.textContent = branch; option.selected = branch === state.current;
-      return option;
-    }));
-    branchControl.hidden = state.branches.length === 0;
-  }
-  branchSelect.addEventListener("change", async () => {
-    const branch = branchSelect.value;
-    if (branch === currentBranch) return;
-    if (!(await save())) { branchSelect.value = currentBranch; return; }
-    branchSelect.disabled = true; status.textContent = "Switching branch…";
-    const data = new FormData(); data.set("jade", body.dataset.jade); data.set("branch", branch);
-    const response = await fetch("/git/switch", {method:"POST", body:data});
-    const result = await response.json();
-    if (!response.ok) { status.textContent = result.error || "Could not switch branch"; branchSelect.value = currentBranch; branchSelect.disabled = false; return; }
-    location.href = "/";
-  });
-  loadBranches();
-
-  const dialog = document.querySelector("#publish-dialog");
-  const destination = document.querySelector("#publish-destination");
-  const summary = document.querySelector("#publish-summary");
-  const note = document.querySelector("#publish-note");
-  const commitField = document.querySelector("#commit-field");
-  const confirm = document.querySelector("#publish-confirm");
-  let publishStatus;
-
-  async function loadPublish() {
-    const file = body.dataset.file.toLowerCase();
-    if (destination.value === "substack") {
-      commitField.hidden = true;
-      summary.textContent = file.endsWith(".md") ? "The active Markdown will be copied as rich text, then Substack’s editor will open." : "Select a Markdown file before publishing to Substack.";
-      note.textContent = "JaDE never receives your Substack credentials.";
-      confirm.textContent = "Copy & open Substack";
-      confirm.disabled = !file.endsWith(".md");
-      return;
-    }
-    if (destination.value === "arxiv") {
-      const ready = /\.(tex|pdf|zip)$/.test(file);
-      commitField.hidden = true;
-      summary.textContent = ready ? (file.endsWith(".tex") ? "JaDE will package the active TeX file and its neighboring source files, download the ZIP, then open arXiv’s submission workflow." : "JaDE will download the active paper, then open arXiv’s submission workflow.") : "Select a TeX, PDF, or ZIP paper before publishing to arXiv.";
-      note.textContent = "Submission stays interactive, as arXiv recommends for individual authors. JaDE never receives your arXiv credentials.";
-      confirm.textContent = "Download & open arXiv";
-      confirm.disabled = !ready;
-      return;
-    }
-    commitField.hidden = false; confirm.textContent = "Commit, push & open PR"; confirm.disabled = true;
-    summary.textContent = "Checking the nearest repository…"; note.textContent = "";
-    const response = await fetch("/publish/status?jade=" + encodeURIComponent(body.dataset.jade));
-    publishStatus = await response.json();
-    if (!response.ok) { summary.textContent = publishStatus.error || "Repository unavailable."; return; }
-    summary.textContent = publishStatus.repository + " · " + publishStatus.branch + (publishStatus.worktree ? " · worktree" : "") + "\n" + publishStatus.root + "\n\n" + (publishStatus.changes || "No uncommitted changes.");
-    note.textContent = !publishStatus.canPublish ? "Create a branch or worktree before publishing." : publishStatus.pullRequest ? "Additional commits will update the existing PR." : "A PR will be created, then opened in GitHub for review.";
-    confirm.disabled = !publishStatus.canPublish;
-  }
-
-  document.querySelector("#publish-open").addEventListener("click", async () => { if (!(await save())) return; dialog.showModal(); loadPublish(); });
-  document.querySelector("#publish-close").addEventListener("click", () => dialog.close());
-  document.querySelector("#publish-cancel").addEventListener("click", () => dialog.close());
-  destination.addEventListener("change", loadPublish);
-  confirm.addEventListener("click", async () => {
-    confirm.disabled = true;
-    note.textContent = destination.value === "github" ? "Publishing…" : destination.value === "arxiv" ? "Packaging paper…" : "Preparing draft…";
-    if (destination.value === "github") {
-      const data = new FormData(); data.set("jade", body.dataset.jade); data.set("message", document.querySelector("#commit-message").value);
-      const response = await fetch("/publish/github", {method:"POST", body:data}); const result = await response.json();
-      if (!response.ok) { note.textContent = result.error; confirm.disabled = false; return; }
-      note.textContent = result.message; if (result.url) window.open(result.url, "_blank", "noopener"); dialog.close(); return;
-    }
-    if (destination.value === "arxiv") {
-      const opened = window.open("about:blank", "_blank");
-      const data = new FormData(); data.set("jade", body.dataset.jade); data.set("file", body.dataset.file);
-      const response = await fetch("/publish/arxiv", {method:"POST", body:data});
-      if (!response.ok) { note.textContent = await response.text(); opened && opened.close(); confirm.disabled = false; return; }
-      const blob = await response.blob();
-      const match = (response.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/);
-      const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = match ? match[1] : "paper-arxiv.zip"; link.click();
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-      if (opened) opened.location = "https://arxiv.org/submit"; else window.open("https://arxiv.org/submit", "_blank", "noopener");
-      dialog.close(); return;
-    }
-    const opened = window.open("https://substack.com/home/post/publish", "_blank");
-    const data = new FormData(); data.set("file", body.dataset.file); data.set("content", editor.value);
-    const response = await fetch("/publish/substack", {method:"POST", body:data}); const result = await response.json();
-    if (!response.ok) { note.textContent = result.error; opened && opened.close(); confirm.disabled = false; return; }
-    try {
-      await navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([result.html],{type:"text/html"}), "text/plain":new Blob([result.text],{type:"text/plain"})})]);
-      note.textContent = "Draft copied. Paste it into Substack; use “" + result.title + "” as the title.";
-    } catch (_) { await navigator.clipboard.writeText(result.text); note.textContent = "Markdown copied. Paste it into Substack."; }
-    dialog.close();
-  });
 })();`
 
 func newApp(root string, port int) (*app, error) {
@@ -449,16 +354,12 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/", a.guard(a.home))
 	mux.HandleFunc("/file", a.guard(a.file))
 	mux.HandleFunc("/save", a.guard(a.save))
-	mux.HandleFunc("/git/branches", a.guard(a.branches))
-	mux.HandleFunc("/git/switch", a.guard(a.switchBranch))
-	mux.HandleFunc("/publish/arxiv", a.guard(a.publishArxiv))
 	mux.HandleFunc("/new", a.guard(a.create))
 	mux.HandleFunc("/front", a.guard(a.front))
 	mux.HandleFunc("/view", a.guard(a.view))
+	mux.HandleFunc("/terminals", a.guard(a.terminals))
+	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
 	mux.HandleFunc("/terminal", a.guard(a.terminal))
-	mux.HandleFunc("/publish/status", a.guard(a.publishStatus))
-	mux.HandleFunc("/publish/github", a.guard(a.publishGitHub))
-	mux.HandleFunc("/publish/substack", a.guard(a.publishSubstack))
 	mux.HandleFunc("/app.js", a.guard(a.script))
 	return mux
 }
@@ -467,6 +368,13 @@ func (a *app) script(response http.ResponseWriter, _ *http.Request) {
 	response.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
 	_, _ = io.WriteString(response, appScript)
+}
+
+func writeJSON(response http.ResponseWriter, status int, value any) {
+	response.Header().Set("Content-Type", "application/json; charset=utf-8")
+	response.Header().Set("Cache-Control", "no-store")
+	response.WriteHeader(status)
+	_ = json.NewEncoder(response).Encode(value)
 }
 
 func queryPath(request *http.Request, name, fallback string) string {
@@ -638,6 +546,11 @@ func (a *app) pageData(jadePath, selected, view string) (pageData, error) {
 }
 
 func (a *app) home(response http.ResponseWriter, request *http.Request) {
+	if request.URL.Path != "/" {
+		http.NotFound(response, request)
+		return
+	}
+
 	if request.Method != http.MethodGet {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
