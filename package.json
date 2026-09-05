@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-web.mjs",
+    "build": "node engine/web/build.mjs",
     "test": "npm run build && go test -race ./... && playwright test",
     "test:setup": "playwright install chromium",
     "test:report": "playwright show-report .tmp/test-report"

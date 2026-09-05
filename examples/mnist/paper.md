@@ -17,10 +17,10 @@ From this directory, with Python 3.10 or newer available:
 ```sh
 ./fetch.sh
 (cd python-baseline && MNIST_TRAIN=10000 MNIST_TEST=1000 python3 mnist.py ..)
-(cd mojo-max && pixi run --locked mnist)
+(cd mojo && pixi run --locked mnist)
 ```
 
-The [fetch script](fetch.sh) downloads the four shared IDX files from the Google-hosted MNIST mirror. The Mojo command requires Pixi and a platform listed in its [environment](mojo-max/pixi.toml). Each implementation writes `metrics.json` and `report.md` in its own directory; Python also writes `model.json` with the ten centroids. Generated artifacts are not committed. The [Mojo paper](mojo-max/paper.md) describes the comparison's scope.
+The [fetch script](fetch.sh) downloads the four shared IDX files from the Google-hosted MNIST mirror. The Mojo command requires Pixi and a platform listed in its [environment](mojo/pixi.toml). Each implementation writes `metrics.json` and `report.md` in its own directory; Python also writes `model.json` with the ten centroids. Generated artifacts are not committed. The [Mojo paper](mojo/paper.md) describes the comparison's scope.
 
 ## Results and limits
 

@@ -10,7 +10,7 @@ The [Mojo program](mnist.mojo) reads the same IDX files as the sibling Python ba
 
 Python accumulates integer sums before division; Mojo accumulates Float64 values. At the default dataset size, the integer-valued sums are small enough to be represented exactly in Float64. This makes the translation straightforward, but matching aggregate accuracy is still weaker than checking every prediction and centroid.
 
-Despite the directory name `mojo-max`, this program uses native Mojo's standard library. It does not use MAX tensor operations, an inference graph, or a GPU. The package channel's name is not evidence that the experiment measures MAX.
+This program uses native Mojo's standard library. It does not use MAX tensor operations, an inference graph, or a GPU. The package channel's name is not evidence that the experiment measures MAX.
 
 ## Reproduce
 

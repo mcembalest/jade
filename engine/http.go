@@ -52,122 +52,20 @@ type app struct {
 	hosts    map[string]bool
 }
 
-//go:embed web/editor.bundle.js
+//go:embed web/dist/editor.bundle.js
 var appScript string
 
-//go:embed web/THIRD_PARTY_NOTICES.txt
+//go:embed web/dist/THIRD_PARTY_NOTICES.txt
 var thirdPartyNotices string
 
-const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details open><summary>{{.Name}}{{if .Jade}}<span class="jade-mark">JaDE</span>{{end}}</summary><ul>{{template "tree" .Children}}</ul></details></li>{{else}}<li><a href="{{.URL}}" data-file="{{.Path}}" data-jade="{{.JadePath}}" class="file-link {{if .Jade}}jade-file{{end}}">{{.Name}}</a></li>{{end}}{{end}}{{end}}<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{.Workspace.Title}} · JaDE</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%3E%3Ctext%20y=%22.9em%22%20font-size=%2290%22%3E🐉%3C/text%3E%3C/svg%3E">
-  <style>
-    :root { --ink:#121815; --muted:#68736d; --line:#dfe5e1; --canvas:#fbfcfb; --panel:#f3f6f4; --paper:#fff; --jade:#0b6b42; --jade-soft:#e2f0e8; }
-    * { box-sizing:border-box; }
-    html, body { height:100%; }
-    body { margin:0; overflow:hidden; color:var(--ink); background:var(--canvas); font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; }
-    button, input, select, textarea { font:inherit; }
-    button { min-height:30px; color:var(--ink); background:var(--paper); border:1px solid var(--line); border-radius:7px; padding:.34rem .68rem; cursor:pointer; }
-    button:hover { border-color:#aeb9b2; background:#f8faf9; }
-    button:focus-visible, a:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline:2px solid #38a172; outline-offset:2px; }
-    #terminal-select { max-width:140px; min-height:30px; border:1px solid var(--line); border-radius:7px; background:var(--paper); color:var(--ink); }
-    button:disabled { cursor:not-allowed; opacity:.45; }
-    header { height:48px; display:flex; align-items:center; padding:0 12px 0 14px; border-bottom:1px solid var(--line); background:var(--paper); }
-    .identity { min-width:0; display:flex; align-items:center; gap:8px; }
-    .brand { color:var(--jade); font-size:12px; font-weight:800; letter-spacing:.12em; }
-    .project { min-width:0; overflow:hidden; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
-    .path { min-width:0; overflow:hidden; color:var(--muted); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; text-overflow:ellipsis; white-space:nowrap; }
-    .header-actions { display:flex; gap:6px; margin-left:auto; padding-left:12px; }
-    #shell { height:calc(100% - 48px); display:grid; grid-template-columns:236px minmax(0,1fr); }
-    aside { min-width:0; overflow:auto; border-right:1px solid var(--line); background:var(--panel); }
-    .explorer-head { position:sticky; top:0; z-index:1; height:38px; display:flex; align-items:center; padding:0 7px 0 14px; border-bottom:1px solid var(--line); background:var(--panel); color:var(--muted); font-size:10px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }
-    #refresh-files { margin-left:auto; }
-    .explorer-head button { padding:0; width:25px; min-height:25px; border:0; background:transparent; font-size:17px; line-height:1; }
-    .tree, .tree ul { margin:0; padding:0; list-style:none; }
-    .tree { padding:6px 0 12px; }
-    .tree ul { padding-left:11px; }
-    .tree details > summary { display:flex; align-items:center; gap:5px; padding:4px 9px; cursor:pointer; color:#37423c; list-style:none; }
-    .tree details > summary::before { content:'›'; width:8px; color:#89948d; transition:transform .1s linear; }
-    .tree details[open] > summary::before { transform:rotate(90deg); }
-    .tree a { position:relative; display:block; overflow:hidden; padding:4px 9px 4px 25px; color:var(--ink); text-decoration:none; text-overflow:ellipsis; white-space:nowrap; }
-    .tree a:hover { background:#e9eeeb; }
-    .tree a.active { color:#064d2f; background:var(--jade-soft); font-weight:650; }
-    .tree a.active::after { position:absolute; inset:4px auto 4px 0; width:3px; border-radius:0 2px 2px 0; background:var(--jade); content:''; }
-    .tree a.jade-file::before { content:'◆'; margin-right:6px; color:var(--jade); font-size:8px; }
-    .jade-mark { margin-left:auto; color:var(--jade); font-size:8px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
-    #workbench { min-width:0; min-height:0; }
-    #document { width:100%; height:100%; min-width:0; min-height:0; display:grid; grid-template-columns:minmax(0,1fr); }
-    #document.jade-open { grid-template-columns:minmax(320px,1fr) minmax(360px,1fr); }
-    #editor-form, #resolved { min-width:0; min-height:0; display:flex; flex-direction:column; }
-    #resolved { border-left:1px solid var(--line); }
-    .filebar { min-height:38px; flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--line); background:var(--paper); font:11px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace; }
-    #save-status { margin-left:auto; flex:1 1 140px; text-align:right; overflow-wrap:anywhere; color:var(--muted); font:11px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
-    #editor { min-height:0; flex:1; overflow:hidden; }
-    #initial-content { display:none; }
-    #draft-recovery { padding:10px 14px; background:#fff6d9; }
-    #draft-recovery select { max-width:200px; }
-    #draft-recovery button { margin:3px; }
-    .filebar button { font-size:11px; min-height:24px; padding:2px 6px; }
+//go:embed web/page.html
+var pageTemplate string
 
-    #resolved[hidden] { display:none; }
-    #view-frame { width:100%; min-height:0; flex:1; border:0; background:white; }
-    dialog { border:1px solid var(--line); border-radius:10px; padding:20px; }
-    dialog form, dialog label { display:grid; gap:12px; }
-    dialog input { min-width:260px; padding:8px; }
-    dialog::backdrop { background:#17201b4a; }
-    @media (max-width:850px) {
-      #shell { grid-template-columns:178px minmax(0,1fr); }
-      .path { display:none; }
-      #document.jade-open { grid-template-columns:1fr; grid-template-rows:minmax(240px,1fr) minmax(240px,1fr); overflow:auto; }
-      #document.jade-open #resolved { border-top:1px solid var(--line); border-left:0; }
-    }
-    @media (prefers-reduced-motion:reduce) { *, *::before, *::after { scroll-behavior:auto!important; transition:none!important; } }
-  </style>
-</head>
-<body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}" data-revision="{{.Revision}}" data-crlf="{{.CRLF}}">
-  <header>
-    <div class="identity">{{if ne .Workspace.Path "."}}<a id="workspace-root" href="/" title="Back to root workspace">JADE</a>{{else}}<span class="brand">JADE</span>{{end}}<span class="project">{{.Workspace.Title}}</span><span class="path">{{.Workspace.Path}}</span></div>
-    <div class="header-actions"><span id="terminal-status" role="status"></span>
-      <select id="terminal-select" aria-label="Terminal app" title="Terminal app"><option>Terminal</option></select>
-      <button id="terminal-toggle" type="button">Open terminal</button>
-    </div>
-  </header>
-  <div id="shell">
-    <aside aria-label="Files">
-      <div class="explorer-head">Files <button id="refresh-files" type="button" title="Refresh files" aria-label="Refresh files">↻</button><button id="new-file" type="button" title="New file" aria-label="New file">+</button></div>
-      <ul class="tree">{{template "tree" .Files}}</ul>
-    </aside>
-    <main id="workbench">
-      <div id="document" class="{{if .IsJade}}jade-open{{end}}">
-        <form id="editor-form" method="post" action="/save">
-          <div class="filebar"><span id="file-name">{{.Selected}}</span><button id="reload-file" type="button" hidden>Reload from disk</button><button id="save-copy" type="button" hidden>Download my edits</button><span id="save-status" role="status">Saved</span></div>
-          <input type="hidden" name="jade" value="{{.Workspace.Path}}">
-          <input type="hidden" name="file" value="{{.Selected}}">
-          <textarea id="initial-content" hidden>
-{{.Contents}}</textarea>
-          <div id="draft-recovery" hidden><label>Unsaved drafts <select id="draft-select" aria-label="Unsaved drafts"></select></label><button id="recover-draft" type="button">Recover draft</button><button id="download-draft" type="button">Download draft</button><button id="discard-draft" type="button">Discard draft</button></div>
-          <div id="editor"></div>
-        </form>
-        <section id="resolved" {{if not .IsJade}}hidden{{end}}>
-          <div class="filebar"><span id="view-name">{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}</span></div>
-          <iframe id="view-frame" sandbox="allow-top-navigation-by-user-activation" src="{{.ViewURL}}" title="Resolved JaDE view"></iframe>
-        </section>
-      </div>
-    </main>
-  </div>
-  <dialog id="new-file-dialog">
-    <form id="new-file-form">
-      <label>New file path <input name="path" required autofocus autocomplete="off" placeholder="notes/draft.md"></label>
-      <div><button id="new-file-cancel" type="button">Cancel</button><button type="submit">Create file</button></div>
-    </form>
-  </dialog>
-  <script src="/app.js" defer></script>
-</body>
-</html>`
+//go:embed web/style.css
+var appStyle string
+
+//go:embed web/preview.css
+var previewStyle string
 
 func newApp(root string, port int) (*app, error) {
 	page, err := template.New("page").Parse(pageTemplate)
@@ -221,6 +119,11 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
 	mux.HandleFunc("/terminal", a.guard(a.terminal))
 	mux.HandleFunc("/app.js", a.guard(a.script))
+	mux.HandleFunc("/style.css", a.guard(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "text/css; charset=utf-8")
+		response.Header().Set("Cache-Control", "no-store")
+		_, _ = io.WriteString(response, appStyle)
+	}))
 	mux.HandleFunc("/licenses.txt", a.guard(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = io.WriteString(response, thirdPartyNotices)
@@ -545,7 +448,7 @@ func (a *app) renderMarkdown(response http.ResponseWriter, jadePath string, mark
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Security-Policy", "sandbox allow-top-navigation-by-user-activation; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><base target="_parent"><style>body{max-width:52rem;margin:2rem auto;padding:0 1.5rem;color:#17201b;font:15px/1.55 system-ui,sans-serif}pre,code{font-family:ui-monospace,monospace}pre{overflow:auto;padding:.8rem;background:#f0f3f1}a{color:#145c3b}img{max-width:100%}table{border-collapse:collapse;margin:.8rem 0}th,td{border:1px solid #cbd2cd;padding:.3rem .6rem}</style>`)
+	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><base target="_parent"><style>`+previewStyle+`</style>`)
 	_, _ = response.Write(rendered.Bytes())
 }
 

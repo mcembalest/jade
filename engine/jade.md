@@ -1,29 +1,14 @@
 # JaDE engine
 
-The Go engine is an inner JaDE. Its implementation files open like an ordinary IDE; selecting this `jade.md` resolves [main.go](main.go) beside the source.
+[http.go](http.go) handles requests and Markdown previews. The rest of the engine is organized by responsibility:
 
-The filesystem boundary and safety rules live in [core.go](core.go), the editor and HTTP interface in [main.go](main.go), and external terminal discovery and launching in [terminal.go](terminal.go). Git and publishing workflows use external tools.
+- [workspace.go](workspace.go): workspace discovery, file trees, and path boundaries.
+- [save.go](save.go): revision checks and atomic file saves.
+- [drafts.go](drafts.go): local recovery storage and locking.
+- [terminal.go](terminal.go): external terminal discovery and launching.
+- [server.go](server.go): loopback listening and graceful shutdown.
+- [web/page.html](web/page.html), [web/style.css](web/style.css), and [web/preview.css](web/preview.css): layout and styling.
+- [web/editor.js](web/editor.js) and [web/terminal.js](web/terminal.js): browser behavior.
+- [web/build.mjs](web/build.mjs): builds the committed browser assets in `web/dist/`.
 
-## Run
-
-From this inner JaDE:
-
-```sh
-jade
-```
-
-The self-contained launcher opens this workspace in a browser.
-
-## Verify
-
-```sh
-go test ./...
-```
-
-## Install
-
-```sh
-go install github.com/mcembalest/jade/cmd/jade@main
-```
-
-The module remains rooted one directory above so this repository can contain multiple inner JaDEs without duplicating dependency state. Go discovers that parent `go.mod` automatically.
+Go tests sit beside the code they exercise. Run `go test ./...` here; Go finds the parent module automatically. See the root README for installation and the full browser test suite.

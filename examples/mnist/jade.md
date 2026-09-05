@@ -7,7 +7,7 @@ One shared problem — classify 28×28 grayscale digits — solved twice against
 ```
 
 - [python-baseline/](python-baseline/) — nearest-centroid, Python standard library
-- [mojo-max/](mojo-max/) — the same model, native Mojo
+- [mojo/](mojo/) — the same model, native Mojo
 
 Read the [short paper](paper.md) for methods, results, limitations, and the **jax-js browser-training TODO**.
 
