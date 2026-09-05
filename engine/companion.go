@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,19 +36,24 @@ type companionMessage struct {
 	Proactive bool              `json:"proactive,omitempty"`
 }
 type companionState struct {
-	Messages []companionMessage `json:"messages"`
-	Enabled  bool               `json:"enabled"`
-	Next     int64              `json:"next"`
-	Seen     string             `json:"seen"`
+	Messages   []companionMessage `json:"messages"`
+	Enabled    bool               `json:"enabled"`
+	Next       int64              `json:"next"`
+	Seen       string             `json:"seen"`
+	DailyDate  string             `json:"dailyDate,omitempty"`
+	RetryAfter int64              `json:"retryAfter,omitempty"`
+	Generation uint64             `json:"generation,omitempty"`
 }
 
-func nextDiscovery() int64 {
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(40*time.Minute/time.Millisecond)))
-	if err != nil {
-		return time.Now().Add(40 * time.Minute).UnixMilli()
+// Use calendar days in the host's local timezone, including daylight-saving changes.
+func (s *companionState) schedule(now time.Time) {
+	evening := time.Date(now.Year(), now.Month(), now.Day(), 20, 0, 0, 0, now.Location())
+	if s.DailyDate >= now.Format("2006-01-02") {
+		evening = evening.AddDate(0, 0, 1)
 	}
-	return time.Now().Add(20*time.Minute).UnixMilli() + n.Int64()
+	s.Next = max(evening.UnixMilli(), s.RetryAfter)
 }
+
 func (s *companionState) append(role, text string, sources []companionSource, proactive bool) {
 	var id [16]byte
 	_, _ = rand.Read(id[:])
@@ -60,6 +64,11 @@ func (s *companionState) append(role, text string, sources []companionSource, pr
 }
 
 func (a *app) companion(response http.ResponseWriter, request *http.Request) {
+	a.companionAt(response, request, time.Now())
+}
+
+func (a *app) companionAt(response http.ResponseWriter, request *http.Request, now time.Time) {
+	started := time.Now()
 	if request.Method != http.MethodGet && request.Method != http.MethodPost {
 		http.Error(response, "method not allowed", 405)
 		return
@@ -109,7 +118,7 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	path := filepath.Join(directory, "chat.json")
-	state := companionState{Messages: []companionMessage{}, Enabled: request.Header.Get("X-JaDE-Companion-Hidden") != "true", Next: nextDiscovery()}
+	state := companionState{Messages: []companionMessage{}, Enabled: request.Header.Get("X-JaDE-Companion-Hidden") != "true"}
 	raw, err := os.ReadFile(path)
 	if err == nil {
 		err = json.Unmarshal(raw, &state)
@@ -129,6 +138,8 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 		}
 		return true
 	}
+	// Recompute rather than inherit a legacy 20–60-minute deadline.
+	state.schedule(now)
 	// Persist the initial deadline so refreshes and separate JaDE windows share one clock.
 	if errors.Is(err, os.ErrNotExist) && !persist() {
 		return
@@ -141,7 +152,7 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 	case "enabled":
 		if state.Enabled != input.Enabled {
 			state.Enabled = input.Enabled
-			state.Next = nextDiscovery()
+			state.Generation++
 		}
 	case "seen":
 		state.Seen = input.Seen
@@ -151,7 +162,7 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 			http.Error(response, "Show Sanjana before sending a message", 409)
 			return
 		}
-		if !state.Enabled || (proactive && time.Now().UnixMilli() < state.Next) {
+		if !state.Enabled || (proactive && now.UnixMilli() < state.Next) {
 			writeJSON(response, 200, state)
 			return
 		}
@@ -161,9 +172,13 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 			http.Error(response, "Sanjana is already thinking. Try again shortly.", 409)
 			return
 		}
-		// Advance before contacting Codex: failures, crashes and multiple tabs cannot create a retry storm.
-		state.Next = nextDiscovery()
-		startedDeadline := state.Next
+		// Reserve an hourly retry before contacting Codex. Failed or quiet searches
+		// cannot loop; chats and hide/restore cannot reset the daily limit.
+		if proactive {
+			state.RetryAfter = now.Add(time.Hour).UnixMilli()
+			state.schedule(now)
+		}
+		generation := state.Generation
 		if !persist() {
 			return
 		}
@@ -190,16 +205,22 @@ func (a *app) companion(response http.ResponseWriter, request *http.Request) {
 			http.Error(response, "Cannot read companion history", 500)
 			return
 		}
-		if !state.Enabled || state.Next != startedDeadline {
+		if !state.Enabled || state.Generation != generation {
 			http.Error(response, "Sanjana was hidden; the reply was stopped", 409)
 			return
 		}
 		if !proactive {
 			state.append("user", input.Message, nil, false)
 		}
+		finished := now.Add(time.Since(started))
 		if answer != "" {
+			if proactive {
+				state.DailyDate = finished.Format("2006-01-02")
+				state.RetryAfter = 0
+			}
 			state.append("assistant", answer, sources, proactive)
 		}
+		state.schedule(finished)
 	}
 	if persist() {
 		writeJSON(response, 200, state)
@@ -338,7 +359,7 @@ Character profile:
 	}
 	prompt := "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nMax's new message:\n" + message
 	if proactive {
-		prompt = "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nAutonomous opportunity: optionally search the web for something you want to share with Max based on your interests and this conversation. Share only if worthwhile; otherwise return an empty message."
+		prompt = "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nDaily evening opportunity: optionally search the web for something you want to share with Max based on your interests and this conversation. Choose one worthwhile discovery for today's update; otherwise return an empty message."
 	}
 	sourceSchema := map[string]any{"type": "object", "properties": map[string]any{"title": map[string]string{"type": "string"}, "url": map[string]string{"type": "string"}}, "required": []string{"title", "url"}, "additionalProperties": false}
 	schema := map[string]any{"type": "object", "properties": map[string]any{"message": map[string]string{"type": "string"}, "sources": map[string]any{"type": "array", "items": sourceSchema}}, "required": []string{"message", "sources"}, "additionalProperties": false}

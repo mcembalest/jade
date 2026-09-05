@@ -87,16 +87,16 @@ test('chat sends, persists, and safely displays linked replies', async ({page,ap
   await page.screenshot({path:'.tmp/companion-chat-'+test.info().project.name+'.png'});
 });
 
-test('autonomous discoveries show a bubble without stealing editing focus and hide pauses them', async ({page,appURL}) => {
-  await page.clock.install();
+test('one evening bubble survives reloads without interrupting editing and hide pauses the next day', async ({page,appURL}) => {
+  await page.clock.install({time:new Date('2026-09-05T19:59:00Z')});
   let discoveries = 0;
-  const state = {messages:[] as {id:string;role:string;text:string;proactive:boolean}[],enabled:true,next:Date.now()+20*60_000,seen:''};
+  const state = {messages:[] as {id:string;role:string;text:string;proactive:boolean}[],enabled:true,next:Date.parse('2026-09-05T20:00:00Z'),seen:''};
   await page.route('**/companion', async route => {
     const body = route.request().postDataJSON();
     if (body?.action === 'discover') {
       discoveries++;
       state.messages.push({id:String(discoveries),role:'assistant',text:'A tiny piece of NYC history for you.',proactive:true});
-      state.next = await page.evaluate(() => Date.now()+20*60_000);
+      state.next = await page.evaluate(() => Date.now()+24*60*60_000);
     }
     if (body?.action === 'enabled') state.enabled = body.enabled;
     if (body?.action === 'seen') state.seen = body.seen;
@@ -104,9 +104,9 @@ test('autonomous discoveries show a bubble without stealing editing focus and hi
   });
   await page.goto(appURL);
   await editor(page).click();
-  await page.clock.fastForward(19*60_000);
+  await page.clock.fastForward(30_000);
   expect(discoveries).toBe(0);
-  await page.clock.fastForward(60_000);
+  await page.clock.fastForward(30_000);
   await expect(page.locator('#companion-bubble')).toBeVisible();
   await expect(editor(page)).toBeFocused();
   await expect(page.locator('#companion-card')).toBeHidden();
@@ -114,9 +114,15 @@ test('autonomous discoveries show a bubble without stealing editing focus and hi
   await page.locator('#companion-bubble').click();
   await expect(page.getByRole('log')).toContainText('NYC history');
   await expect(page.locator('#companion-bubble')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await page.clock.fastForward(3*60*60_000);
+  await page.reload();
+  await expect(page.locator('#companion-bubble')).toBeHidden();
+  expect(discoveries).toBe(1);
+  await page.locator('#companion-toggle').click();
   await page.locator('#companion-hide').click();
   await expect.poll(() => state.enabled).toBe(false);
-  await page.clock.fastForward(61*60_000);
+  await page.clock.fastForward(24*60*60_000);
   expect(discoveries).toBe(1);
   await expect(page.locator('#companion-dock')).toBeHidden();
 });

@@ -120,7 +120,9 @@ func TestCompanionProtocol(t *testing.T) {
 }
 func TestCompanionHistoryAndSchedule(t *testing.T) {
 	fakeCompanion(t)
-	handler := testApp(t).handler()
+	now := time.Date(2026, 9, 5, 19, 59, 0, 0, time.Local)
+	application := testApp(t)
+	handler := http.HandlerFunc(application.guard(func(w http.ResponseWriter, r *http.Request) { application.companionAt(w, r, now) }))
 	call := func(body string) companionState {
 		t.Helper()
 		method := "POST"
@@ -140,9 +142,10 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 		return s
 	}
 	s := call("")
-	if delay := time.Until(time.UnixMilli(s.Next)); delay < 20*time.Minute-time.Second || delay > 60*time.Minute {
-		t.Fatal(delay)
+	if s.Next != now.Add(time.Minute).UnixMilli() {
+		t.Fatal("not scheduled for 8pm", s.Next)
 	}
+	initialNext := s.Next
 	if call("").Next != s.Next {
 		t.Fatal("reload reset schedule")
 	}
@@ -150,6 +153,9 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 		t.Fatal("early discovery")
 	}
 	s = call(`{"action":"chat","message":"hello"}`)
+	if s.Next != initialNext {
+		t.Fatal("chat postponed the evening update")
+	}
 	if len(s.Messages) != 2 || s.Messages[0].Role != "user" || s.Messages[1].Text != "A new discovery." {
 		t.Fatal(s)
 	}
@@ -172,18 +178,39 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 	s.Next = 1
 	raw, _ = json.Marshal(s)
 	_ = os.WriteFile(path, raw, 0600)
+	now = now.Add(time.Minute)
 	s = call(`{"action":"discover"}`)
+	if s.DailyDate != "2026-09-05" || s.Next != now.AddDate(0, 0, 1).UnixMilli() {
+		t.Fatal("daily limit not saved", s)
+	}
 	if len(s.Messages) != 3 || !s.Messages[2].Proactive {
 		t.Fatal(s)
 	}
 	if len(call(`{"action":"discover"}`).Messages) != 3 {
 		t.Fatal("duplicate discovery")
 	}
+	// Chat, reloads, stale deadlines and hide/restore cannot trigger a second update.
+	call(`{"action":"enabled","enabled":false}`)
+	call(`{"action":"enabled","enabled":true}`)
+	now = now.Add(2 * time.Hour)
+	if len(call(`{"action":"discover"}`).Messages) != 3 {
+		t.Fatal("same-day update after restore")
+	}
+	if call("").DailyDate != "2026-09-05" {
+		t.Fatal("reload lost daily limit")
+	}
+	now = now.AddDate(0, 0, 3)
+	if len(call(`{"action":"discover"}`).Messages) != 4 {
+		t.Fatal("missed evenings did not resume")
+	}
+	if len(call(`{"action":"discover"}`).Messages) != 4 {
+		t.Fatal("missed evenings accumulated")
+	}
 	t.Setenv("JADE_FAKE_MODE", "bad")
 	req := httptest.NewRequest("POST", "http://127.0.0.1:7333/companion", strings.NewReader(`{"action":"chat","message":"fail"}`))
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != 503 || len(call("").Messages) != 3 {
+	if rec.Code != 503 || len(call("").Messages) != 4 {
 		t.Fatal("failed reply damaged history")
 	}
 	for _, body := range []string{`{"action":"chat","message":""}`, `{"action":"unknown"}`, `not json`} {
@@ -276,5 +303,84 @@ func TestCompanionLive(t *testing.T) {
 	t.Log(answer, sources)
 	if len(sources) == 0 {
 		t.Fatal("no sources")
+	}
+}
+
+func TestCompanionEveningSchedule(t *testing.T) {
+	zone, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parse := func(value string) time.Time {
+		result, err := time.ParseInLocation("2006-01-02 15:04", value, zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	for _, tc := range []struct{ name, now, delivered, retry, want string }{
+		{"before evening", "2026-09-05 19:59", "", "", "2026-09-05 20:00"},
+		{"at eight", "2026-09-05 20:00", "", "", "2026-09-05 20:00"},
+		{"late opening", "2026-09-05 22:00", "", "", "2026-09-05 20:00"},
+		{"already delivered", "2026-09-05 21:00", "2026-09-05", "", "2026-09-06 20:00"},
+		{"missed days", "2026-09-09 21:00", "2026-09-05", "", "2026-09-09 20:00"},
+		{"hourly retry", "2026-09-05 20:30", "", "2026-09-05 21:00", "2026-09-05 21:00"},
+		{"no morning catchup", "2026-09-06 00:20", "", "2026-09-06 00:30", "2026-09-06 20:00"},
+		{"spring forward", "2026-03-07 21:00", "2026-03-07", "", "2026-03-08 20:00"},
+		{"fall back", "2026-10-31 21:00", "2026-10-31", "", "2026-11-01 20:00"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := companionState{DailyDate: tc.delivered, Next: 1}
+			if tc.retry != "" {
+				s.RetryAfter = parse(tc.retry).UnixMilli()
+			}
+			s.schedule(parse(tc.now))
+			if s.Next != parse(tc.want).UnixMilli() {
+				t.Fatalf("got %v want %s", time.UnixMilli(s.Next).In(zone), tc.want)
+			}
+		})
+	}
+}
+
+func TestCompanionDailyRetry(t *testing.T) {
+	fakeCompanion(t)
+	application := testApp(t)
+	now := time.Date(2026, 9, 5, 20, 0, 0, 0, time.Local)
+	call := func(action string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", "http://127.0.0.1:7333/companion", strings.NewReader(`{"action":"`+action+`"}`))
+		rec := httptest.NewRecorder()
+		application.companionAt(rec, req, now)
+		return rec
+	}
+	t.Setenv("JADE_FAKE_MODE", "bad")
+	if rec := call("discover"); rec.Code != 503 {
+		t.Fatal(rec.Code)
+	}
+	now = now.Add(59 * time.Minute)
+	var s companionState
+	rec := call("discover")
+	_ = json.Unmarshal(rec.Body.Bytes(), &s)
+	if rec.Code != 200 || s.DailyDate != "" || len(s.Messages) != 0 {
+		t.Fatal("failure retried too early", rec.Code, s)
+	}
+	now = now.Add(time.Minute)
+	t.Setenv("JADE_FAKE_MODE", "quiet")
+	rec = call("discover")
+	_ = json.Unmarshal(rec.Body.Bytes(), &s)
+	if rec.Code != 200 || s.Next != now.Add(time.Hour).UnixMilli() || s.DailyDate != "" {
+		t.Fatal("quiet result did not defer an hour", s)
+	}
+	now = now.Add(time.Hour)
+	t.Setenv("JADE_FAKE_MODE", "normal")
+	rec = call("discover")
+	_ = json.Unmarshal(rec.Body.Bytes(), &s)
+	if rec.Code != 200 || len(s.Messages) != 1 || s.DailyDate != "2026-09-05" {
+		t.Fatal("retry did not deliver", s)
+	}
+	now = now.Add(time.Hour)
+	rec = call("discover")
+	_ = json.Unmarshal(rec.Body.Bytes(), &s)
+	if rec.Code != 200 || len(s.Messages) != 1 {
+		t.Fatal("extra daily update", s)
 	}
 }

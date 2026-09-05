@@ -30,7 +30,7 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
     const start = async () => {
       child = spawn(resolve('.tmp/e2e/jade'), ['--no-open', workspace], {
         env: { ...process.env, HOME: join(dirname(workspace), 'home'),
-          XDG_CONFIG_HOME: join(dirname(workspace), 'home', '.config'), JADE_TERMINAL: '' },
+          XDG_CONFIG_HOME: join(dirname(workspace), 'home', '.config'), CODEX_HOME: join(dirname(workspace), 'home', '.codex'), JADE_TERMINAL: '' },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let startup = '';

@@ -22,17 +22,19 @@ Live chat uses `codex` from `PATH`, ChatGPT subscription authentication, and the
 | Stop | Cancel the current request |
 | Speech bubble | Open an unread autonomous discovery |
 | Hide Sanjana | Pause discoveries across JaDE windows |
-| Show Sanjana | Resume with a new interval |
+| Show Sanjana | Resume without resetting the daily limit |
 | Still animation | Stop animation; system reduced-motion preferences also apply |
 | Escape / close / click outside | Dismiss the popover |
 
 ## Discovery schedule
 
-- Random interval: 20–60 minutes, checked approximately every 15 seconds by open JaDE pages.
-- Browser timer throttling and computer sleep can delay an opportunity. No searches run after all JaDE pages close.
-- One shared deadline and one in-flight request across tabs and JaDE processes for the same OS user.
-- Chat requests also reset the discovery deadline. Failed searches wait for the next interval; missed intervals do not accumulate.
-- Sanjana may search or remain quiet at an opportunity. Discoveries use a speech bubble without opening the popover or moving keyboard focus.
+- At most one proactive update per local calendar day, starting at 8pm in the JaDE host computer’s timezone.
+- If JaDE opens later that evening, the update can run then. Earlier sessions wait until 8pm. Missed days do not accumulate; there is no morning catch-up.
+- Open JaDE pages check the shared deadline approximately every 15 seconds. Browser timer throttling and computer sleep can delay an opportunity. No searches run after all JaDE pages close.
+- If a search fails or Sanjana finds nothing worth sharing, she can try again after an hour while active that evening. After she posts, the next opportunity is the following evening.
+- Chat remains available at any time. Chats, restarts, and hide/show do not reset the daily limit or postpone the evening update.
+- One shared deadline and one in-flight request across tabs and JaDE processes for the same OS user. Existing chat history is preserved when upgrading from the random-interval schedule.
+- Discoveries use a speech bubble without opening the popover or moving keyboard focus.
 - Requests use the same subscription allowance as other Codex work. Rate-limit and sign-in errors appear in chat.
 
 ## Character and history
