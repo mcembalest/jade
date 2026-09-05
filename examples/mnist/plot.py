@@ -20,8 +20,8 @@ plt.rcParams.update({"figure.facecolor": BG, "axes.facecolor": BG, "savefig.face
                      "font.size": 11, "svg.fonttype": "path", "svg.hashsalt": "jade-mnist"})
 
 
-def finish(fig, path, subtitle):
-    fig.text(.07, .88, subtitle, color=MUTED, fontsize=10)
+def finish(fig, path, subtitle, subtitle_y=.88):
+    fig.text(.07, subtitle_y, subtitle, color=MUTED, fontsize=10)
     fig.savefig(ROOT / path, bbox_inches="tight", metadata={"Date": None})
     svg = ROOT / path
     svg.write_text("\n".join(line.rstrip() for line in svg.read_text().splitlines()) + "\n")
@@ -34,7 +34,55 @@ def clean(ax):
     ax.set_axisbelow(True)
 
 
+def max_plot():
+    run = json.loads((ROOT / "mojo/measurements.json").read_text())
+    row = run["inference"]
+    batch128 = next(point for point in row if point["batch_size"] == 128)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5.6))
+    fig.subplots_adjust(top=.77, bottom=.2, left=.09, right=.97, wspace=.4)
+    fig.suptitle("Compile once. Call it again.", x=.07, ha="left", fontsize=24, fontweight="bold")
+    costs = [run["compile_seconds"]["infer_batch_128"], batch128["first_timed_call_ms"] / 1000,
+             batch128["warm_median_ms"] / 1000]
+    axes[0].bar(["Compile", "First call", "Warm call"], costs, color=[MUTED, GOLD, TEAL], width=.6)
+    axes[0].set(yscale="log", ylabel="Seconds · logarithmic scale", title="128 images per call")
+    for index, cost in enumerate(costs):
+        axes[0].text(index, cost * 1.4, f"{cost:.2f} s" if cost >= 1 else f"{cost*1000:.3f} ms",
+                     ha="center", fontsize=9, color=INK)
+    axes[0].set_ylim(min(costs) / 3, max(costs) * 6)
+    batches = np.array([point["batch_size"] for point in row])
+    rate = batches / np.array([point["warm_median_ms"] for point in row]) * 1000
+    axes[1].plot(batches, rate, "o-", color=TEAL, lw=2.5)
+    axes[1].set(xscale="log", yscale="log", xlabel="Images per call", ylabel="Images / second · warm median")
+    axes[1].set_xticks([1, 8, 32, 128, 1000], ["1", "8", "32", "128", "1,000"])
+    for ax in axes: clean(ax)
+    finish(fig, "mojo/latency.svg", f"MAX {run['version']} + CUSTOM MOJO RELU  /  {run['hardware'].upper()} CPU  /  GPU NOT YET VERIFIED")
+
+
+def jax_plot():
+    run = json.loads((ROOT / "jax-js/measurements.json").read_text())
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5.6))
+    fig.subplots_adjust(top=.76, bottom=.18, left=.08, right=.97, wspace=.36)
+    fig.suptitle("The browser learns. Then it answers.", x=.07, ha="left", fontsize=23, fontweight="bold")
+    loss = np.array(run["loss"])
+    steps = np.arange(1, len(loss) + 1)
+    axes[0].plot(steps, loss, color=TEAL, alpha=.35, lw=1)
+    window = 12
+    axes[0].plot(steps[window-1:], np.convolve(loss, np.ones(window)/window, mode="valid"),
+                 color=TEAL, lw=2.5, label="12-step moving mean")
+    axes[0].set(xlabel="Optimizer step", ylabel="Training cross entropy", ylim=(0, None))
+    axes[0].legend(frameon=False, labelcolor=INK, fontsize=9)
+    row = run["inference"]
+    batch = np.array([point["batch"] for point in row])
+    axes[1].plot(batch, [point["warm_median_ms"] for point in row], "o-", color=GOLD, lw=2.5)
+    axes[1].set(xscale="log", xlabel="Images per call", ylabel="Warm inference · ms", ylim=(0, None))
+    axes[1].set_xticks([1, 8, 32, 128, 1000], ["1", "8", "32", "128", "1,000"])
+    for ax in axes: clean(ax)
+    finish(fig, "jax-js/learning.svg", f"JAX-JS / WEBGPU / APPLE GPU / {run['train']:,} DIGITS × {run['epochs']} EPOCHS / {run['training_seconds']:.2f} S TRAINING*\n*First-use compilation included; driver caches may be warm. Loading, shuffling and evaluation excluded.", subtitle_y=.85)
+
+
 def main():
+    max_plot()
+    jax_plot()
     runs = {device: json.loads((ROOT / f"mlx/results/{device}/metrics.json").read_text())
             for device in ["cpu", "gpu"]}
     for run in runs.values():

@@ -1,20 +1,26 @@
-# Mojo / MAX: explore the stack from the kernel upward
+# Mojo / MAX: own the operation, run the graph
 
-![Distances between the ten learned digit centroids](distances.svg)
+![MAX compilation cost and warm inference throughput](latency.svg)
 
-The heatmap shows distances between the shared baseline's digit prototypes, computed by `plot.py` from the Python reference. It visualizes the math of the existing Mojo implementation; it does not measure GPU execution or Mojo latency.
+A small MLP with a **Mojo ReLU inside a MAX graph**. Train it, save the weights, reload them, and measure inference across batch sizes. The plot records a CPU run on an Apple M3 Max; GPU execution is still unverified on this machine because Apple's Metal compiler is missing.
 
-## Runnable reference
+## Run
+
+With [Pixi](https://pixi.sh) installed, from this directory:
 
 ```sh
 ../fetch.sh
-pixi run --locked mnist
+pixi run --locked python run.py --device cpu
+pixi run --locked python run.py --device cpu --weights results/cpu/model.npz --output results/reloaded
+pixi run --locked python verify.py
 ```
 
-The current `mnist.mojo` is a native CPU nearest-centroid classifier. Its 773/1,000 result checks the translation's aggregate correctness. The [short paper](paper.md) describes that reference.
+For an accelerator, choose `--device gpu`. On a Mac, the [Metal toolchain](https://docs.modular.com/max/packages) is required. With full Xcode installed and selected, install it using `xcodebuild -downloadComponent MetalToolchain`. Command Line Tools alone were insufficient here. The experiment reports a missing prerequisite rather than silently switching devices.
 
-## The experiment we actually want next
+The environment pins MAX 26.5.0 and its accompanying Mojo toolchain. Results and checkpoints stay in `results/<device>/`; compilation time is recorded separately from execution.
 
-Explore a small GPU-accelerated training/inference path on Apple silicon: first a useful Mojo GPU operation, then how it integrates with MAX model execution. Compare the setup, code required, training step cost, checkpoint handoff, and inference latency with MLX. Use the shared MLP specification once supported; record gaps rather than silently changing the workload.
+## What to explore
 
-The goal is an understandable stack we can modify, with performance that justifies the complexity. CPU centroid parity is only a starting point. Apple GPU coverage and training support must be checked against the pinned Mojo/MAX version; the current Pixi environment installs Mojo, not the full MAX serving stack.
+[model.py](model.py) expresses the MLP and explicit backpropagation/Adam updates using MAX operations. [kernels/relu.mojo](kernels/relu.mojo) owns one activation; MAX handles the matrix operations. This is a deliberately small experiment in control and integration, not a general training library or evidence about LLM serving.
+
+The [paper](paper.md) describes the workload and timing boundaries. The earlier native CPU centroid reference remains runnable with `pixi run --locked mnist`; its [prototype distances](distances.svg) show which digit averages resemble one another.

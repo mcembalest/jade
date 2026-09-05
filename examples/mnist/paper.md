@@ -8,7 +8,11 @@ How much machinery is needed to train a useful small model, save it, and run low
 
 MLX is the first runnable GPU training/inference experiment: an eager 784–128–10 ReLU MLP trained with Adam at learning rate 0.001, float32 pixels scaled to [0, 1], batch size 128, three epochs, and seed 0. It uses the first 10,000 training and 1,000 test images. The CPU run uses the same architecture and settings. Seeds support local repeatability; device-level numerical behavior can differ.
 
-The older Python and native Mojo implementations fit ten centroids and agree on 773/1,000 correct. They explain a simple algorithm; they are not training or latency competitors to the MLP. Mojo GPU/MAX integration and jax-js training remain explicit next experiments.
+MAX now expresses the same MLP architecture with a custom Mojo activation and explicit backpropagation/Adam. Its CPU training and checkpoint reload are verified; the Apple GPU path still needs a working Metal compiler and validation. The jax-js example trains the MLP in the browser using automatic differentiation and Optax, with WebGPU and WebAssembly choices, checkpoint downloads, and inference measurements.
+
+These implementations share architecture, subset sizes, and optimizer settings, but use different initialization and shuffle streams. Their timing boundaries also differ: MAX records graph compilation separately, while jax-js includes first-use compilation in its training measurements. Treat the individual plots as local experiments, not a framework ranking.
+
+The older Python and native Mojo implementations fit ten centroids and agree on 773/1,000 correct. They explain a simple algorithm; they are not training or latency competitors to the MLP.
 
 ## Measurements
 
@@ -20,6 +24,6 @@ Training times include shuffling, batch selection, gradients, optimizer updates,
 
 ## Reproduce and extend
 
-Run the commands in this project's `jade.md`. [MLX](mlx/) owns its saved checkpoints and full metrics; [plot.py](plot.py) generates the figures and captures their input measurements. CPU and GPU runs are separate processes. For a strict future inference comparison between frameworks, load identical exported weights and validate their outputs before timing.
+Run the commands in this project's `jade.md` and the [MLX](mlx/), [MAX](mojo/), and [jax-js](jax-js/) introductions. Each experiment owns its saved checkpoints and full metrics; [plot.py](plot.py) generates the figures. CPU and GPU runs are separate processes or browser runs. For a strict future inference comparison between frameworks, load identical exported weights and validate their outputs before timing.
 
 Next, hold the MLP workload fixed across frameworks and record install steps, dependencies, code needed, unsupported operations, latency distributions, and time to a chosen accuracy. Add full-dataset runs and repeated trials before drawing broad conclusions. MNIST won't establish LLM serving performance, but it provides a compact way to learn how each stack fits together.

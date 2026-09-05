@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><title>MNIST · in the browser</title>
+  <style>
+    :root {
+      font:
+        16px/1.6 -apple-system,
+        BlinkMacSystemFont,
+        sans-serif;
+      color: #1c3238;
+      background: #f6f8f7;
+    }
+    body {
+      max-width: 900px;
+      margin: 70px auto;
+      padding: 0 24px;
+    }
+    h1 {
+      font-size: 42px;
+      letter-spacing: -1.7px;
+      margin: 0;
+    }
+    p {
+      color: #627477;
+    }
+    small {
+      color: #627477;
+    }
+    button,
+    select,
+    input {
+      font: inherit;
+      padding: 8px 12px;
+      border: 1px solid #cbd7d4;
+      border-radius: 9px;
+      background: white;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+    #train {
+      background: #147d72;
+      color: white;
+      border-color: #147d72;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+    label {
+      font-size: 13px;
+      display: grid;
+      gap: 5px;
+    }
+    input[type="number"] {
+      width: 85px;
+    }
+    .panel {
+      background: white;
+      border: 1px solid #e0e7e4;
+      border-radius: 20px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    svg {
+      width: 100%;
+      height: auto;
+    }
+    #status {
+      min-height: 26px;
+    }
+    #summary {
+      font-size: 22px;
+      letter-spacing: -0.5px;
+    }
+    .downloads {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #file {
+      max-width: 250px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: right;
+    }
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+    td,
+    th {
+      padding: 7px;
+      border-bottom: 1px solid #edf1ef;
+    }
+    #error {
+      color: #a13b32;
+      white-space: pre-wrap;
+    }
+  </style>
+  <h1>A neural network, right here.</h1>
+  <p>MNIST · 784 → 128 → 10 · ReLU · Adam · no remote compute</p>
+  <div class="controls">
+    <label>Compute<select id="backend"></select></label
+    ><label
+      >Training digits<input
+        id="count"
+        type="number"
+        value="10000"
+        min="128"
+        max="60000" /></label
+    ><label
+      >Epochs<input
+        id="epochs"
+        type="number"
+        value="3"
+        min="1"
+        max="20" /></label
+    ><button id="train" disabled>Train from scratch</button>
+  </div>
+  <p id="status" role="status">Starting the browser runtime…</p>
+  <div id="error" role="alert"></div>
+  <section class="panel">
+    <div id="summary">Watch the loss fall.</div>
+    <svg
+      id="chart"
+      viewBox="0 0 800 260"
+      role="img"
+      aria-label="Training cross entropy versus optimizer step"
+    >
+      <text x="20" y="130" fill="#627477">
+        Train to see the learning curve.
+      </text></svg
+    ><small
+      >Cross entropy by optimizer step. Lower is better. Training includes
+      compilation and synchronization; data loading, shuffling, and evaluation
+      are excluded.</small
+    >
+  </section>
+  <section class="panel">
+    <h2>From training to inference</h2>
+    <div class="downloads">
+      <button id="benchmark" disabled>Measure inference</button
+      ><button id="save" disabled>Save weights</button
+      ><button id="metrics" disabled>Save measurements</button
+      ><label
+        >Reload weights<input
+          id="file"
+          type="file"
+          accept=".json,application/json"
+          disabled
+      /></label>
+    </div>
+    <div id="timings"></div>
+    <p>
+      <small
+        >Inference measures synchronized device output, with resident inputs and
+        weights. First timed call and warm median are separate.</small
+      >
+    </p>
+  </section>
+  <script type="module" src="/app.js"></script>
+</html>

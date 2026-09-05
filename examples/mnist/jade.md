@@ -11,8 +11,8 @@ Measured on an Apple M3 Max with MLX 0.32.2. Warm, synchronized inference; Pytho
 | Inner JaDE | What you can do now | Next question |
 | --- | --- | --- |
 | [MLX](mlx/) | Train an MLP on the Apple GPU or CPU, save/reload weights, measure latency | Where does batching make GPU execution worthwhile? |
-| [Mojo / MAX direction](mojo/) | Run the existing native CPU centroid reference | How little code connects an Apple GPU kernel to MAX inference? |
-| [jax-js](jax-js/) | Explore the shared data and browser experiment plan | Can the same MLP train and predict interactively through WebGPU? |
+| [Mojo / MAX](mojo/) | Train a MAX MLP with a custom Mojo activation; save/reload and time it on CPU | What does the Apple GPU path require? Metal toolchain verification remains open. |
+| [jax-js](jax-js/) | Train in the browser, save/reload weights, and measure WebGPU or WebAssembly inference | How much work can stay entirely inside the browser? |
 | [Python reference](python-baseline/) | Understand a ten-centroid model with no ML dependencies | What work are the accelerated stacks replacing? |
 
 ## Run the GPU experiment
@@ -34,4 +34,4 @@ To regenerate all checked-in plots after those runs:
 uv run --script --locked plot.py
 ```
 
-Plot inputs are recorded in [measurements.json](measurements.json). Each framework has its own `jade.md`; all belong to this one MNIST project.
+MLX plot inputs are recorded in [measurements.json](measurements.json); MAX and jax-js keep measurements beside their own introductions. Each framework has its own `jade.md` and matching local `README.md`; all belong to this one MNIST project.
