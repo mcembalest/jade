@@ -206,12 +206,12 @@ func externalDestination(destination string) bool {
 	return destination == "" || strings.Contains(destination, "://") || strings.HasPrefix(destination, "#") || strings.HasPrefix(destination, "/") || strings.HasPrefix(destination, "mailto:") || strings.HasPrefix(destination, "data:")
 }
 
-func (a *app) rewriteDestination(jadePath string, destination []byte, isImage bool) []byte {
+func (a *app) rewriteDestination(jadePath, sourceFile string, destination []byte, isImage bool) []byte {
 	dest := string(destination)
 	if externalDestination(dest) {
 		return destination
 	}
-	clean := strings.TrimSuffix(dest, "/")
+	clean := filepath.ToSlash(filepath.Join(filepath.Dir(filepath.FromSlash(sourceFile)), filepath.FromSlash(dest)))
 	resolved, err := existingFile(a.root, jadePath, clean)
 	if err != nil {
 		return destination
@@ -249,7 +249,7 @@ func (a *app) rewriteDestination(jadePath string, destination []byte, isImage bo
 	return []byte("/?jade=" + query(jadePath) + "&file=" + query(markerName) + "&view=" + query(rel))
 }
 
-func (a *app) rewriteDestinations(jadePath string, document ast.Node) {
+func (a *app) rewriteDestinations(jadePath, sourceFile string, document ast.Node) {
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -259,11 +259,11 @@ func (a *app) rewriteDestinations(jadePath string, document ast.Node) {
 			if !bytes.HasPrefix(typed.Destination, []byte("#")) {
 				typed.SetAttributeString("target", []byte("_top"))
 			}
-			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, false)
+			typed.Destination = a.rewriteDestination(jadePath, sourceFile, typed.Destination, false)
 		case *ast.AutoLink:
 			typed.SetAttributeString("target", []byte("_top"))
 		case *ast.Image:
-			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, true)
+			typed.Destination = a.rewriteDestination(jadePath, sourceFile, typed.Destination, true)
 		}
 		return ast.WalkContinue, nil
 	})
@@ -431,9 +431,9 @@ func (a *app) create(response http.ResponseWriter, request *http.Request) {
 	_, _ = io.WriteString(response, location)
 }
 
-func (a *app) renderMarkdown(response http.ResponseWriter, jadePath string, markdown []byte) {
+func (a *app) renderMarkdown(response http.ResponseWriter, jadePath, sourceFile string, markdown []byte) {
 	document := a.markdown.Parser().Parse(gmtext.NewReader(markdown))
-	a.rewriteDestinations(jadePath, document)
+	a.rewriteDestinations(jadePath, sourceFile, document)
 	var rendered bytes.Buffer
 	if err := a.markdown.Renderer().Render(&rendered, markdown, document); err != nil {
 		http.Error(response, err.Error(), http.StatusInternalServerError)
@@ -452,7 +452,7 @@ func (a *app) front(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	a.renderMarkdown(response, workspace.Path, []byte(workspace.Markdown))
+	a.renderMarkdown(response, workspace.Path, markerName, []byte(workspace.Markdown))
 }
 
 func (a *app) view(response http.ResponseWriter, request *http.Request) {
@@ -473,7 +473,7 @@ func (a *app) view(response http.ResponseWriter, request *http.Request) {
 			http.Error(response, readErr.Error(), http.StatusInternalServerError)
 			return
 		}
-		a.renderMarkdown(response, jadePath, contents)
+		a.renderMarkdown(response, jadePath, filePath, contents)
 		return
 	}
 	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")

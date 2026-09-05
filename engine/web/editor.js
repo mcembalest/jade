@@ -9,6 +9,10 @@ import { go } from '@codemirror/lang-go';
 import { initTerminals } from './terminal.js';
 
 const body = document.body;
+let activeURL = location.href;
+let historyIndex = history.state?.jadeIndex ?? 0;
+let restoringHistory = false;
+history.replaceState({...history.state, jadeIndex:historyIndex}, '', activeURL);
 const form = document.querySelector('#editor-form');
 const status = document.querySelector('#save-status');
 const reloadButton = document.querySelector('#reload-file');
@@ -171,7 +175,7 @@ async function request(url, options) {
 function fileURL(file = active.file) {
   const url = new URL('/file', location.origin);
   url.searchParams.set('jade', body.dataset.jade); url.searchParams.set('file', file);
-  const view = new URL(location.href).searchParams.get('view');
+  const view = new URL(activeURL).searchParams.get('view');
   if (file === active.file && view) url.searchParams.set('view', view);
   return url;
 }
@@ -241,7 +245,10 @@ async function showFile(data, href, link) {
   document.querySelector('#file-name').title = data.selected;
   document.querySelector('#empty-editor').hidden = !!data.selected;
   document.querySelectorAll('.file-link').forEach(node => node.classList.toggle('active', node === link));
-  if (href) history.pushState({}, '', href);
+  if (href) {
+    history.pushState({jadeIndex:++historyIndex}, '', href);
+    activeURL = location.href;
+  }
   refreshPreview(data); report('Saved'); await loadDrafts();
   if (compact.matches) showFiles(false);
   editor.focus();
@@ -349,7 +356,28 @@ addEventListener('beforeunload', event => {
   rememberPosition();
   if (dirty() || saving) { event.preventDefault(); event.returnValue = ''; }
 });
-addEventListener('popstate', () => leave(async () => location.reload()));
+addEventListener('popstate', async () => {
+  if (restoringHistory) { restoringHistory = false; return; }
+  const targetURL = location.href;
+  const restore = () => {
+    const targetIndex = history.state?.jadeIndex;
+    // Back/Forward changes the URL before we can save. Return to the current
+    // entry on failure so the address and subsequent navigation match the text.
+    if (Number.isInteger(targetIndex) && targetIndex !== historyIndex) {
+      restoringHistory = true;
+      history.go(historyIndex - targetIndex);
+    } else {
+      history.replaceState({jadeIndex:historyIndex}, '', activeURL);
+    }
+  };
+  if (moving || loadingDrafts) { restore(); return; }
+  let navigating = false;
+  await leave(async () => {
+    if (restoringHistory || location.href !== targetURL) return;
+    navigating = true; location.reload();
+  });
+  if (!navigating && !restoringHistory) restore();
+});
 form.addEventListener('submit', event => { event.preventDefault(); save(); });
 document.querySelector('#refresh-files').addEventListener('click', () => leave(async () => location.reload()));
 const newFileDialog = document.querySelector('#new-file-dialog');

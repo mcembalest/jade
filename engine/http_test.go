@@ -208,3 +208,26 @@ func TestCrossSiteNavigationOnlyOpensShell(t *testing.T) {
 		})
 	}
 }
+
+func TestReportLinksResolveBesideReport(t *testing.T) {
+	application := testApp(t)
+	writeTestFile(t, filepath.Join(application.root, "reports", "latency.svg"), `<svg xmlns="http://www.w3.org/2000/svg"/>`)
+	writeTestFile(t, filepath.Join(application.root, "reports", "next.md"), "# Next\n")
+	for _, tc := range []struct {
+		name, destination, want string
+		image                   bool
+	}{
+		{"local image", "latency.svg", "data:image/svg+xml;base64,", true},
+		{"sibling report", "next.md", "/?jade=.&file=jade.md&view=reports%2Fnext.md", false},
+		{"parent file", "../notes.go", "/?jade=.&file=jade.md&view=notes.go", false},
+		{"outside workspace", "../../outside.svg", "../../outside.svg", true},
+		{"external link", "https://example.com/paper", "https://example.com/paper", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(application.rewriteDestination(".", "reports/result.md", []byte(tc.destination), tc.image))
+			if !strings.HasPrefix(got, tc.want) {
+				t.Fatalf("destination = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
