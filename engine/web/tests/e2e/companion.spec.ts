@@ -85,7 +85,7 @@ test('chat sends, persists, and safely displays linked replies', async ({page,ap
   await page.reload();
   await page.locator('#companion-toggle').click();
   await expect(page.getByRole('log')).toContainText('A little discovery.');
-  await page.screenshot({path:'.tmp/companion-chat-'+test.info().project.name+'.png'});
+  await page.screenshot({path:'../../.tmp/companion-chat-'+test.info().project.name+'.png'});
 });
 
 test('hourly pending research is visible before one evening update', async ({page,appURL}) => {
@@ -123,9 +123,9 @@ test('hourly pending research is visible before one evening update', async ({pag
   await expect(page.locator('#companion-research')).toContainText('NYC history find 1');
   await expect(page.getByRole('link',{name:'Original source 1'})).toHaveAttribute('href','https://example.com/1');
   await expect(page.locator('#companion-research-status')).toContainText('Last checked');
-  await page.screenshot({path:'.tmp/companion-research-'+test.info().project.name+'.png'});
+  await page.screenshot({path:'../../.tmp/companion-research-'+test.info().project.name+'.png'});
   await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'.tmp/companion-research-mobile-'+test.info().project.name+'.png'});
+  await page.screenshot({path:'../../.tmp/companion-research-mobile-'+test.info().project.name+'.png'});
   await page.setViewportSize({width:1240,height:820});
   await page.keyboard.press('Escape');
   await page.clock.fastForward(59*60_000);

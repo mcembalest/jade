@@ -28,7 +28,7 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
       clearTimeout(force);
     };
     const start = async () => {
-      child = spawn(resolve('.tmp/e2e/jade'), ['--no-open', workspace], {
+      child = spawn(resolve('../../.tmp/e2e/jade'), ['--no-open', workspace], {
         env: { ...process.env, HOME: join(dirname(workspace), 'home'),
           XDG_CONFIG_HOME: join(dirname(workspace), 'home', '.config'), CODEX_HOME: join(dirname(workspace), 'home', '.codex'), JADE_TERMINAL: '' },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -62,7 +62,7 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
   },
   appURL: async ({ app }, use) => { await use(app.url); },
   baselineURL: async ({ workspace }, use) => {
-    const bundle = await readFile('.tmp/e2e/baseline.js');
+    const bundle = await readFile('../../.tmp/e2e/baseline.js');
     const server = createServer(async (request, response) => {
       if (request.url === "/document") {
         response.setHeader("Content-Type", "text/plain; charset=utf-8");

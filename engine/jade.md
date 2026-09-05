@@ -17,9 +17,12 @@
 
 ## Development
 
-Run from the repository root. Development requires Node and Go; installation requires Go only.
+Browser source, dependencies, configuration, and tests: `engine/web/`. Development requires Node and Go; installation requires Go only.
+
+From the repository root:
 
 ```sh
+cd engine/web
 npm ci
 npm run test:setup
 npm test
@@ -31,7 +34,7 @@ npm test
 | `npm test` | Build, Go race tests, Chromium and WebKit regression tests |
 | `npm run test:report` | Open the browser test report |
 | `npm run test:measure` | Informational latency measurements |
-| `go run ./cmd/jade --no-open .` | Start without opening a browser |
+| `go -C ../.. run ./cmd/jade --no-open .` | Start without opening a browser |
 | `npx playwright test tests/e2e/visual.spec.ts --update-snapshots` | Refresh visual baselines |
 
 Commit rebuilt `web/dist/` assets and visually reviewed screenshot baselines with source changes.

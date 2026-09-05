@@ -60,9 +60,11 @@ The profile and recent conversation are sent to Codex. Each request uses an ephe
 
 ## Development
 
+From the repository root:
+
 ```sh
-npm run build
-npm test
+npm --prefix engine/web run build
+npm --prefix engine/web test
 ```
 
 Rebuild and restart JaDE after changing the character profile, artwork, or code. Regression tests use a fake Codex process and intercepted browser responses; they do not spend subscription usage.

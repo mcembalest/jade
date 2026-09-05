@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "npm run typecheck && node engine/web/build.mjs",
-    "test": "npm run build && go test -race ./... && playwright test --grep-invert @measure",
+    "build": "npm run typecheck && node build.mjs",
+    "test": "npm run build && go -C ../.. test -race ./... && playwright test --grep-invert @measure",
     "test:setup": "playwright install chromium webkit",
-    "test:report": "playwright show-report .tmp/test-report",
+    "test:report": "playwright show-report ../../.tmp/test-report",
     "typecheck": "tsc --noEmit",
-    "test:measure": "npm run build && playwright test --grep @measure --workers=1 --output=.tmp/measurements --reporter=list"
+    "test:measure": "npm run build && playwright test --grep @measure --workers=1 --output=../../.tmp/measurements --reporter=list"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.0",

@@ -3,4 +3,4 @@
 sessions.md
 /.tmp/
 
-/node_modules/
+/engine/web/node_modules/

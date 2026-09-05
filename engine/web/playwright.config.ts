@@ -12,8 +12,8 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   retries: 0,
   globalSetup: './tests/global-setup.ts',
-  outputDir: '.tmp/test-results',
-  reporter: [['list'], ['html', { outputFolder: '.tmp/test-report', open: 'never' }]],
+  outputDir: '../../.tmp/test-results',
+  reporter: [['list'], ['html', { outputFolder: '../../.tmp/test-report', open: 'never' }]],
   use: {
     headless: true,
     viewport: { width: 1240, height: 820 },
