@@ -3,6 +3,7 @@ package engine
 import (
 	"bytes"
 	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"html/template"
@@ -223,7 +224,22 @@ func (a *app) rewriteDestination(jadePath string, destination []byte, isImage bo
 	}
 	rel := filepath.ToSlash(filepath.Clean(clean))
 	if isImage {
-		return []byte("/view?jade=" + query(jadePath) + "&file=" + query(rel))
+		// Sandboxed previews have an opaque origin. Embed bounded local images so
+		// browsers can display them without weakening our cross-site request guard.
+		kind := mime.TypeByExtension(filepath.Ext(resolved))
+		if !strings.HasPrefix(kind, "image/") || !info.Mode().IsRegular() || info.Size() > maximumTextBytes {
+			return destination
+		}
+		file, err := os.Open(resolved)
+		if err != nil {
+			return destination
+		}
+		defer file.Close()
+		contents, err := io.ReadAll(io.LimitReader(file, maximumTextBytes+1))
+		if err != nil || len(contents) > maximumTextBytes {
+			return destination
+		}
+		return []byte("data:" + kind + ";base64," + base64.StdEncoding.EncodeToString(contents))
 	}
 	return []byte("/?jade=" + query(jadePath) + "&file=" + query(markerName) + "&view=" + query(rel))
 }
