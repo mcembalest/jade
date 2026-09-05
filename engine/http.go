@@ -65,6 +65,9 @@ var pageTemplate string
 //go:embed web/style.css
 var appStyle string
 
+//go:embed web/companion/spritesheet.png
+var companionSprite []byte
+
 //go:embed web/preview.css
 var previewStyle string
 
@@ -125,6 +128,10 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
 	mux.HandleFunc("/terminal", a.guard(a.terminal))
 	mux.HandleFunc("/app.js", a.guard(a.script))
+	mux.HandleFunc("/companion.png", a.guard(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "image/png")
+		_, _ = response.Write(companionSprite)
+	}))
 	mux.HandleFunc("/style.css", a.guard(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "text/css; charset=utf-8")
 		response.Header().Set("Cache-Control", "no-store")

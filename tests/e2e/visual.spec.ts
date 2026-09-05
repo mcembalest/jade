@@ -3,7 +3,7 @@ import { mkdir, writeFile, readFile, cp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 
-test.use({ deviceScaleFactor: 2 });
+test.use({ deviceScaleFactor: 2, reducedMotion: 'reduce' });
 
 const longName = 'a-long-filename-that-must-not-push-save-controls-out-of-the-visible-window.txt';
 const longError = 'The operation could not be completed. '.repeat(8);
@@ -31,7 +31,7 @@ test.beforeEach(async ({ page, workspace }) => {
   await writeFile(join(workspace, longName), 'A long file\n'.repeat(100));
   await mkdir(join(workspace, 'a-very-long-directory-name-that-needs-an-ellipsis'), {recursive:true});
   await writeFile(join(workspace, 'a-very-long-directory-name-that-needs-an-ellipsis/notes.txt'), 'Nested notes');
-  await cp('examples/mnist/mlx/learning.svg', join(workspace, 'plot.svg'));
+  await writeFile(join(workspace, 'plot.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560"><rect width="1000" height="560" fill="#101923"/><path d="M80 60V480H940" fill="none" stroke="#91a6b6" stroke-width="3"/><path d="M80 420L250 260L420 190L600 130L780 110L940 90" fill="none" stroke="#50dfbd" stroke-width="8"/><text x="80" y="40" fill="#eaf3f8" font-family="sans-serif" font-size="24">Training progress</text></svg>');
   await writeFile(join(workspace, 'jade.md'), '# A workspace with a long but useful descriptive name\n\n' +
     'https://example.com/' + 'long'.repeat(80) + '\n\n' +
     '| Column |' + ' Measurement |'.repeat(8) + '\n| --- |' + ' --- |'.repeat(8) + '\n| Local |' + ' value |'.repeat(8) +

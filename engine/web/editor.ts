@@ -1,3 +1,4 @@
+import { initCompanion } from './companion.js';
 import { basicSetup } from 'codemirror';
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
@@ -426,3 +427,5 @@ addEventListener('keydown', event => {
   if (event.key.toLowerCase() === 's') { event.preventDefault(); if (!newFileDialog.open) save(); }
   if (event.key.toLowerCase() === 'j') { event.preventDefault(); openTerminal(); }
 });
+
+initCompanion();

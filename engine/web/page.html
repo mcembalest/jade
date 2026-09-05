@@ -12,6 +12,7 @@
     <button id="files-toggle" type="button" aria-controls="file-explorer" aria-expanded="true">Files</button>
     <div class="identity">{{if ne .Workspace.Path "."}}<a id="workspace-root" href="/" title="Back to root workspace">JADE</a>{{else}}<span class="brand">JADE</span>{{end}}<span class="project" title="{{.Workspace.Title}}">{{.Workspace.Title}}</span><span class="path" title="{{.Workspace.Path}}">{{.Workspace.Path}}</span></div>
     <div class="header-actions">
+      <button id="companion-restore" type="button" hidden>Show Sanjana</button>
       <select id="terminal-select" aria-label="Terminal app" title="Terminal app"><option>Terminal</option></select>
       <button id="terminal-toggle" type="button">Open terminal</button>
     </div>
@@ -48,6 +49,20 @@
       <div class="dialog-actions"><button id="new-file-cancel" type="button">Cancel</button><button type="submit">Create file</button></div>
     </form>
   </dialog>
+  <div id="companion-dock">
+    <section id="companion-card" aria-label="Sanjana’s corner" popover="auto">
+      <div class="companion-heading"><div><span class="companion-eyebrow">A LITTLE COMPANY</span><h2>Sanjana’s corner</h2></div><button id="companion-close" type="button" autofocus aria-label="Close Sanjana’s corner">×</button></div>
+      <p class="companion-intro">A small pause. Something lovely. A little company while you make things.</p>
+      <div class="companion-story" aria-live="polite" aria-atomic="true">
+        <span id="companion-category"></span><span class="companion-sample">Sample</span>
+        <h3 id="companion-title"></h3><p id="companion-body"></p>
+        <div class="companion-pagination"><span id="companion-count"></span><button id="companion-next" type="button">Another little thing →</button></div>
+      </div>
+      <p class="companion-note">These are sample cards, not live updates. Her personality is yours to write.</p>
+      <div class="companion-settings"><label><input id="companion-motion" type="checkbox"> Still animation</label><button id="companion-hide" type="button">Hide Sanjana</button></div>
+    </section>
+    <button id="companion-toggle" type="button" aria-label="Visit Sanjana’s corner" popovertarget="companion-card"><span id="companion-sprite" aria-hidden="true"></span><span class="companion-name">Sanjana <span aria-hidden="true">♡</span></span></button>
+  </div>
   <script src="/app.js" defer></script>
 </body>
 </html>
