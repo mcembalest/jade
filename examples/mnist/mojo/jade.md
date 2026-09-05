@@ -2,7 +2,7 @@
 
 ![MAX compilation cost and warm inference throughput](latency.svg)
 
-A small MLP with a **Mojo ReLU inside a MAX graph**. Train it, save the weights, reload them, and measure inference across batch sizes. The plot records a CPU run on an Apple M3 Max; GPU execution is still unverified on this machine because Apple's Metal compiler is missing.
+A small MLP with a **Mojo ReLU inside a MAX graph**. Train it, save the weights, reload them, and measure inference across batch sizes. The plot records CPU and Metal GPU runs on an Apple M3 Max.
 
 ## Run
 
@@ -10,12 +10,12 @@ With [Pixi](https://pixi.sh) installed, from this directory:
 
 ```sh
 ../fetch.sh
-pixi run --locked python run.py --device cpu
-pixi run --locked python run.py --device cpu --weights results/cpu/model.npz --output results/reloaded
-pixi run --locked python verify.py
+pixi run --locked python run.py --device gpu
+pixi run --locked python run.py --device gpu --weights results/gpu/model.npz --output results/gpu-reloaded
+pixi run --locked python verify.py --device gpu
 ```
 
-For an accelerator, choose `--device gpu`. On a Mac, the [Metal toolchain](https://docs.modular.com/max/packages) is required. With full Xcode installed and selected, install it using `xcodebuild -downloadComponent MetalToolchain`. Command Line Tools alone were insufficient here. The experiment reports a missing prerequisite rather than silently switching devices.
+For the CPU, choose `--device cpu` in either script. The Mac GPU path requires the [Metal toolchain](https://docs.modular.com/max/packages). With full Xcode installed and selected, install it using `xcodebuild -downloadComponent MetalToolchain`. Command Line Tools alone were insufficient here. The experiment reports a missing prerequisite rather than silently switching devices.
 
 The environment pins MAX 26.5.0 and its accompanying Mojo toolchain. Results and checkpoints stay in `results/<device>/`; compilation time is recorded separately from execution.
 

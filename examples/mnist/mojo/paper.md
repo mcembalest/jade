@@ -14,14 +14,16 @@ The training graph implements derivatives of mean softmax cross-entropy and Adam
 
 ## Measurements
 
-[measurements.json](measurements.json) records the local CPU run. The chart shows graph-loading/compilation time, the first timed call, and the warm median for a batch of 128, alongside warm throughput over several batch sizes. Compilation is real setup work and should remain visible when comparing developer experience.
+[measurements.json](measurements.json) records local CPU and Metal GPU runs. The chart shows GPU graph-loading/compilation time, the first timed call, and the warm median for a batch of 128, alongside CPU/GPU warm throughput over several batch sizes. Compilation is real setup work and should remain visible when comparing developer experience. These runs were recorded separately; compiler caches and other machine activity may differ.
+
+The CPU has lower warm inference latency at every tested batch size in these runs. The GPU path works, but this small MLP does not establish a GPU speed advantage. Larger workloads and repeated trials would help investigate where that changes.
 
 Each shape gets its own graph. Graph loading/compilation is timed separately. Training includes shuffling, host batch construction, input transfers, optimizer execution, and device synchronization; it excludes graph compilation and per-epoch test evaluation. Inference uses resident input and weight buffers, synchronizes each call, and excludes copying its output back to NumPy. The first call and five warmups precede 50 measured repetitions. These are sequential calls, not server throughput; timing varies with the machine's other work.
 
-The CPU forward path is compared with NumPy, and a separate process reloads the checkpoint. GPU execution has **not** been verified here: MAX detected the Apple GPU but compilation failed, and the machine has no Metal compiler. The CLI checks that prerequisite. A successful toolchain installation and numerical checks on the accelerator are still needed before claiming GPU support for this particular graph.
+Both devices pass the independent NumPy forward and Adam-update checks, whose reference derivatives are checked by finite differences. Both train to 917/1,000 correct on the held-out prefix. A separate process reloads each checkpoint and verifies inference without retraining. Installing Apple's Metal toolchain resolved the earlier GPU compilation blocker.
 
 ## Reproduce
 
-Follow this folder's [introduction](jade.md). The checked-in Pixi lockfile covers macOS ARM64 and Linux x86-64; only macOS CPU execution was tested locally. From the parent MNIST folder, `uv run --script --locked plot.py` rebuilds the figures, including this chart from its checked-in measurements.
+Follow this folder's [introduction](jade.md). The checked-in Pixi lockfile covers macOS ARM64 and Linux x86-64; macOS CPU and Apple GPU execution were tested locally. From the parent MNIST folder, `uv run --script --locked plot.py` rebuilds the figures, including this chart from its checked-in measurements.
 
 The old [mnist.mojo](mnist.mojo) remains an independent nearest-centroid reference. It agrees with Python on 773/1,000 labels in aggregate, but it uses a different model and contributes no MLP performance comparison.

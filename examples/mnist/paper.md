@@ -8,7 +8,7 @@ How much machinery is needed to train a useful small model, save it, and run low
 
 MLX is the first runnable GPU training/inference experiment: an eager 784–128–10 ReLU MLP trained with Adam at learning rate 0.001, float32 pixels scaled to [0, 1], batch size 128, three epochs, and seed 0. It uses the first 10,000 training and 1,000 test images. The CPU run uses the same architecture and settings. Seeds support local repeatability; device-level numerical behavior can differ.
 
-MAX now expresses the same MLP architecture with a custom Mojo activation and explicit backpropagation/Adam. Its CPU training and checkpoint reload are verified; the Apple GPU path still needs a working Metal compiler and validation. The jax-js example trains the MLP in the browser using automatic differentiation and Optax, with WebGPU and WebAssembly choices, checkpoint downloads, and inference measurements.
+MAX now expresses the same MLP architecture with a custom Mojo activation and explicit backpropagation/Adam. Training, numerical checks, and checkpoint reload are verified on CPU and the Apple GPU with the Metal toolchain installed. The jax-js example trains the MLP in the browser using automatic differentiation and Optax, with WebGPU and WebAssembly choices, checkpoint downloads, and inference measurements.
 
 These implementations share architecture, subset sizes, and optimizer settings, but use different initialization and shuffle streams. Their timing boundaries also differ: MAX records graph compilation separately, while jax-js includes first-use compilation in its training measurements. Treat the individual plots as local experiments, not a framework ranking.
 

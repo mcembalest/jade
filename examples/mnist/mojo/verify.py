@@ -1,10 +1,12 @@
 """Check MAX's Mojo activation, derivatives, and Adam against NumPy.
 
 Run with: pixi run --locked python verify.py
-Uses synthetic inputs, so the check needs no MNIST download or GPU.
+Uses synthetic inputs, so the check needs no MNIST download.
+Defaults to CPU; pass --device gpu to check the accelerator.
 """
+import argparse
 import numpy as np
-from max.driver import Buffer, CPU
+from max.driver import Accelerator, Buffer, CPU
 from max.engine import InferenceSession
 from model import SHAPES, build, initialize, reference
 
@@ -23,6 +25,9 @@ def loss_and_grad(weights, x, target):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--device", choices=["cpu", "gpu"], default="cpu")
+    args = parser.parse_args()
     rng = np.random.default_rng(42)
     x = rng.normal(size=(7, 784)).astype(np.float32)
     target = np.eye(10, dtype=np.float32)[rng.integers(10, size=len(x))]
@@ -39,12 +44,12 @@ def main():
             minus = loss_and_grad(precise, x.astype(np.float64), target)[0]
             tensor.flat[index] = original
             np.testing.assert_allclose((plus-minus)/2e-5, gradient.flat[index], atol=1e-8, rtol=1e-5)
-    device = CPU()
+    device = Accelerator() if args.device == "gpu" else CPU()
     session = InferenceSession(devices=[device])
     infer = session.load(build(device, len(x)))
     train = session.load(build(device, len(x), training=True))
-    buffer = lambda a: Buffer.from_numpy(np.ascontiguousarray(a, dtype=np.float32))
-    host = lambda a: a.to_numpy().copy()
+    buffer = lambda a: Buffer.from_numpy(np.ascontiguousarray(a, dtype=np.float32)).to(device)
+    host = lambda a: a.to(CPU()).to_numpy().copy()
     actual = host(infer.execute(buffer(x), *map(buffer, weights))[0])
     np.testing.assert_allclose(actual, reference(weights, x), atol=2e-5, rtol=2e-5)
     # Nonzero optimizer states exercise decay and bias correction, not just step 1.

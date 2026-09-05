@@ -11,7 +11,7 @@ Measured on an Apple M3 Max with MLX 0.32.2. Warm, synchronized inference; Pytho
 | Inner JaDE | What you can do now | Next question |
 | --- | --- | --- |
 | [MLX](mlx/) | Train an MLP on the Apple GPU or CPU, save/reload weights, measure latency | Where does batching make GPU execution worthwhile? |
-| [Mojo / MAX](mojo/) | Train a MAX MLP with a custom Mojo activation; save/reload and time it on CPU | What does the Apple GPU path require? Metal toolchain verification remains open. |
+| [Mojo / MAX](mojo/) | Train a MAX MLP with a custom Mojo activation; save/reload and time it on CPU or Apple GPU | How do compilation, dispatch, and batching affect latency? |
 | [jax-js](jax-js/) | Train in the browser, save/reload weights, and measure WebGPU or WebAssembly inference | How much work can stay entirely inside the browser? |
 | [Python reference](python-baseline/) | Understand a ten-centroid model with no ML dependencies | What work are the accelerated stacks replacing? |
 

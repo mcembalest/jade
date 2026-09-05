@@ -1,82 +1,166 @@
 {
-  "framework": "max",
-  "version": "26.5.0",
-  "mojo_version": "Mojo 1.0.0 (ed45d567)",
-  "device": "cpu",
-  "hardware": "Apple M3 Max",
-  "os": "macOS-26.5-arm64-arm-64bit",
-  "model": "MLP 784-128-10 ReLU",
-  "optimizer": "Adam lr=0.001; explicit derivatives",
-  "seed": 0,
-  "training_images": 10000,
-  "test_images": 1000,
-  "batch_size": 128,
-  "epoch_seconds": [
-    0.03149974998086691,
-    0.03556074993684888,
-    0.029679416911676526
-  ],
-  "epoch_accuracy": [
-    0.864,
-    0.892,
-    0.917
-  ],
-  "accuracy": 0.917,
-  "compile_seconds": {
-    "infer_batch_3": 1.553971332963556,
-    "train_batch_128": 1.3839024158660322,
-    "train_batch_16": 16.26744220801629,
-    "infer_batch_1000": 8.379697374999523,
-    "infer_batch_1": 1.2406407080125064,
-    "infer_batch_8": 1.2253758339211345,
-    "infer_batch_32": 1.2276363749988377,
-    "infer_batch_128": 8.378194583114237,
-    "infer_batch_512": 8.212494583800435
+  "cpu": {
+    "framework": "max",
+    "version": "26.5.0",
+    "mojo_version": "Mojo 1.0.0 (ed45d567)",
+    "device": "cpu",
+    "hardware": "Apple M3 Max",
+    "os": "macOS-26.5-arm64-arm-64bit",
+    "model": "MLP 784-128-10 ReLU",
+    "optimizer": "Adam lr=0.001; explicit derivatives",
+    "seed": 0,
+    "training_images": 10000,
+    "test_images": 1000,
+    "batch_size": 128,
+    "epoch_seconds": [
+      0.03149974998086691,
+      0.03556074993684888,
+      0.029679416911676526
+    ],
+    "epoch_accuracy": [
+      0.864,
+      0.892,
+      0.917
+    ],
+    "accuracy": 0.917,
+    "compile_seconds": {
+      "infer_batch_3": 1.553971332963556,
+      "train_batch_128": 1.3839024158660322,
+      "train_batch_16": 16.26744220801629,
+      "infer_batch_1000": 8.379697374999523,
+      "infer_batch_1": 1.2406407080125064,
+      "infer_batch_8": 1.2253758339211345,
+      "infer_batch_32": 1.2276363749988377,
+      "infer_batch_128": 8.378194583114237,
+      "infer_batch_512": 8.212494583800435
+    },
+    "inference": [
+      {
+        "batch_size": 1,
+        "warm_median_ms": 0.0926669454202056,
+        "warm_p95_ms": 0.10700025595724581,
+        "repeats": 50,
+        "first_timed_call_ms": 0.47904206439852715
+      },
+      {
+        "batch_size": 8,
+        "warm_median_ms": 0.06970844697207212,
+        "warm_p95_ms": 0.1095169223845005,
+        "repeats": 50,
+        "first_timed_call_ms": 0.24641584604978561
+      },
+      {
+        "batch_size": 32,
+        "warm_median_ms": 0.07697904948145151,
+        "warm_p95_ms": 0.10858706664294003,
+        "repeats": 50,
+        "first_timed_call_ms": 0.2376670017838478
+      },
+      {
+        "batch_size": 128,
+        "warm_median_ms": 0.09683298412710428,
+        "warm_p95_ms": 0.11616080300882457,
+        "repeats": 50,
+        "first_timed_call_ms": 0.22058398462831974
+      },
+      {
+        "batch_size": 512,
+        "warm_median_ms": 0.1682913862168789,
+        "warm_p95_ms": 0.20523301791399717,
+        "repeats": 50,
+        "first_timed_call_ms": 0.41379197500646114
+      },
+      {
+        "batch_size": 1000,
+        "warm_median_ms": 0.27789652813225985,
+        "warm_p95_ms": 0.6048766546882685,
+        "repeats": 50,
+        "first_timed_call_ms": 0.3086251672357321
+      }
+    ],
+    "timing": "device synchronize; inference inputs/weights resident; compile and output host copy excluded; first_timed_call_ms is the first benchmark call (evaluation may already have used this shape); training includes per-batch input transfer and excludes compilation and epoch evaluation",
+    "training_seconds": 0.09673991682939231
   },
-  "inference": [
-    {
-      "batch_size": 1,
-      "warm_median_ms": 0.0926669454202056,
-      "warm_p95_ms": 0.10700025595724581,
-      "repeats": 50,
-      "first_timed_call_ms": 0.47904206439852715
+  "gpu": {
+    "framework": "max",
+    "version": "26.5.0",
+    "mojo_version": "Mojo 1.0.0 (ed45d567)",
+    "device": "gpu",
+    "hardware": "Apple M3 Max",
+    "os": "macOS-26.5-arm64-arm-64bit",
+    "model": "MLP 784-128-10 ReLU",
+    "optimizer": "Adam lr=0.001; explicit derivatives",
+    "seed": 0,
+    "training_images": 10000,
+    "test_images": 1000,
+    "batch_size": 128,
+    "training_seconds": 1.1315737089607865,
+    "epoch_seconds": [
+      0.630621749907732,
+      0.2508046249859035,
+      0.25014733406715095
+    ],
+    "epoch_accuracy": [
+      0.864,
+      0.892,
+      0.917
+    ],
+    "accuracy": 0.917,
+    "compile_seconds": {
+      "infer_batch_3": 11.183257249882445,
+      "train_batch_128": 17.732978499960154,
+      "train_batch_16": 18.171872541075572,
+      "infer_batch_1000": 11.748101208126172,
+      "infer_batch_1": 11.513985082972795,
+      "infer_batch_8": 11.889605415984988,
+      "infer_batch_32": 11.512351790908724,
+      "infer_batch_128": 11.57973016705364,
+      "infer_batch_512": 11.735916082980111
     },
-    {
-      "batch_size": 8,
-      "warm_median_ms": 0.06970844697207212,
-      "warm_p95_ms": 0.1095169223845005,
-      "repeats": 50,
-      "first_timed_call_ms": 0.24641584604978561
-    },
-    {
-      "batch_size": 32,
-      "warm_median_ms": 0.07697904948145151,
-      "warm_p95_ms": 0.10858706664294003,
-      "repeats": 50,
-      "first_timed_call_ms": 0.2376670017838478
-    },
-    {
-      "batch_size": 128,
-      "warm_median_ms": 0.09683298412710428,
-      "warm_p95_ms": 0.11616080300882457,
-      "repeats": 50,
-      "first_timed_call_ms": 0.22058398462831974
-    },
-    {
-      "batch_size": 512,
-      "warm_median_ms": 0.1682913862168789,
-      "warm_p95_ms": 0.20523301791399717,
-      "repeats": 50,
-      "first_timed_call_ms": 0.41379197500646114
-    },
-    {
-      "batch_size": 1000,
-      "warm_median_ms": 0.27789652813225985,
-      "warm_p95_ms": 0.6048766546882685,
-      "repeats": 50,
-      "first_timed_call_ms": 0.3086251672357321
-    }
-  ],
-  "timing": "device synchronize; inference inputs/weights resident; compile and output host copy excluded; first_timed_call_ms is the first benchmark call (evaluation may already have used this shape); training includes per-batch input transfer and excludes compilation and epoch evaluation",
-  "training_seconds": 0.09673991682939231
+    "inference": [
+      {
+        "batch_size": 1,
+        "first_timed_call_ms": 23.3499170280993,
+        "warm_median_ms": 0.6971876136958599,
+        "warm_p95_ms": 1.44024349283427,
+        "repeats": 50
+      },
+      {
+        "batch_size": 8,
+        "first_timed_call_ms": 74.43995913490653,
+        "warm_median_ms": 0.5811669398099184,
+        "warm_p95_ms": 1.3213275931775565,
+        "repeats": 50
+      },
+      {
+        "batch_size": 32,
+        "first_timed_call_ms": 70.7992089446634,
+        "warm_median_ms": 0.594708020798862,
+        "warm_p95_ms": 1.480372797232121,
+        "repeats": 50
+      },
+      {
+        "batch_size": 128,
+        "first_timed_call_ms": 62.680916860699654,
+        "warm_median_ms": 0.5953754298388958,
+        "warm_p95_ms": 1.8479662714526057,
+        "repeats": 50
+      },
+      {
+        "batch_size": 512,
+        "first_timed_call_ms": 67.74962483905256,
+        "warm_median_ms": 0.6285414565354586,
+        "warm_p95_ms": 1.2088750256225467,
+        "repeats": 50
+      },
+      {
+        "batch_size": 1000,
+        "first_timed_call_ms": 0.44241687282919884,
+        "warm_median_ms": 0.37543755024671555,
+        "warm_p95_ms": 0.7906456361524751,
+        "repeats": 50
+      }
+    ],
+    "timing": "device synchronize; inference inputs/weights resident; compile and output host copy excluded; first_timed_call_ms is the first benchmark call (evaluation may already have used this shape); training includes per-batch input transfer and excludes compilation and epoch evaluation"
+  }
 }
