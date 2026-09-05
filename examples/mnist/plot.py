@@ -216,7 +216,7 @@ def overview(runs):
         handles=[Patch(color=GOLD, label="CPU / WASM"), Patch(color=TEAL, label="GPU")],
         loc="lower center", ncol=2, frameon=False,
     )
-    finish(fig, "inference.svg")
+    finish(fig, "latency.svg")
 
 
 def detail(runs, backend, path):

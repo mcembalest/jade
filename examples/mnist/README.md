@@ -1,6 +1,6 @@
 # MNIST latency
 
-![MNIST training and inference latency](inference.svg)
+![MNIST training and inference latency](latency.svg)
 
 | Stack | Implementation | Devices |
 | --- | --- | --- |
