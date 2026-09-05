@@ -4,6 +4,6 @@ import { EditorView, keymap } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
 
 new EditorView({
-  parent: document.querySelector('#editor'),
+  parent: document.querySelector('#editor')!,
   extensions: [basicSetup, keymap.of([indentWithTab]), EditorView.contentAttributes.of({'aria-label':'Editor'})],
 });

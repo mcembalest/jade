@@ -4,8 +4,6 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 
 test.use({ deviceScaleFactor: 2 });
-// Hide both native and CodeMirror cursors only while capturing baselines.
-const screenshotStyle = '* { caret-color: transparent !important; } .cm-cursor { display: none !important; }';
 
 const longName = 'a-long-filename-that-must-not-push-save-controls-out-of-the-visible-window.txt';
 const longError = 'The operation could not be completed. '.repeat(8);
@@ -49,7 +47,7 @@ for (const size of [{width:1440,height:900},{width:900,height:600},{width:760,he
     // WebKit paints a native contenteditable caret despite screenshot caret hiding.
     // Capture this initial layout unfocused; keyboard focus is exercised below.
     await editor(page).blur();
-    await expect(page).toHaveScreenshot(`workspace-${size.width}.png`, {scale:'css',style:screenshotStyle});
+    await expect(page).toHaveScreenshot(`workspace-${size.width}.png`, {scale:'css'});
     await page.screenshot({scale:'css',path:info.outputPath('workspace.png')});
     if (await page.locator('#preview-toggle').getAttribute('aria-pressed') === 'false') await page.locator('#preview-toggle').click();
     await fits(page, ['#editor', '#view-frame']);
@@ -69,7 +67,7 @@ for (const size of [{width:1440,height:900},{width:900,height:600},{width:760,he
     if (size.width < 700) await expect(page.locator('#file-explorer')).not.toBeVisible();
     await editor(page).press('ControlOrMeta+f');
     await fits(page, ['#file-name', '#save-status', '.cm-search', '.cm-search input[name="search"]']);
-    if (size.width === 390) await expect(page).toHaveScreenshot('search-narrow.png', {scale:'css',style:screenshotStyle});
+    if (size.width === 390) await expect(page).toHaveScreenshot('search-narrow.png', {scale:'css'});
     await page.screenshot({scale:'css',path:info.outputPath('search.png')});
     await page.locator('.cm-search input[name="search"]').fill('long');
     await page.locator('.cm-search input[name="search"]').press('Escape');
@@ -92,7 +90,7 @@ test('new file errors stay in the dialog and retry succeeds', async ({page,appUR
   await expect(path).toHaveValue('notes.txt');
   await expect(path).toBeFocused();
   await fits(page,['#new-file-dialog', '#new-file-error', '#new-file-cancel']);
-  await expect(page).toHaveScreenshot('new-file-error.png', {scale:'css',style:screenshotStyle});
+  await expect(page).toHaveScreenshot('new-file-error.png', {scale:'css'});
   await page.screenshot({scale:'css',path:info.outputPath('new-file-error.png')});
   await path.fill('new notes.md');
   await page.getByRole('button',{name:'Create file',exact:true}).click();
@@ -109,7 +107,7 @@ test('terminal notices fit, dismiss, and recover after failure', async ({page,ap
   await page.getByRole('button',{name:'Open terminal',exact:true}).click();
   await expect(page.locator('#terminal-status')).toContainText('could not');
   await fits(page,['header','#terminal-notice','#dismiss-terminal','#editor']);
-  await expect(page).toHaveScreenshot('terminal-error.png', {scale:'css',style:screenshotStyle});
+  await expect(page).toHaveScreenshot('terminal-error.png', {scale:'css'});
   await page.screenshot({scale:'css',path:info.outputPath('terminal-error.png')});
   await page.getByRole('button',{name:'Dismiss terminal message'}).click();
   await expect(page.locator('#terminal-notice')).not.toBeVisible();
@@ -128,7 +126,7 @@ test('recovery has a visible Save action and errors leave room for editing', asy
   await page.goto(appURL);
   await expect(page.locator('#recover-draft')).toBeVisible();
   await fits(page,['#draft-select','#recover-draft','#download-draft','#discard-draft','#editor']);
-  await expect(page).toHaveScreenshot('recovery.png', {scale:'css',style:screenshotStyle,mask:[page.locator('#draft-select')]});
+  await expect(page).toHaveScreenshot('recovery.png', {scale:'css',mask:[page.locator('#draft-select')]});
   await page.screenshot({scale:'css',path:info.outputPath('recovery.png')});
   await page.getByRole('button',{name:'Recover draft',exact:true}).click();
   await expect(page.getByRole('button',{name:'Save',exact:true})).toBeVisible();
@@ -141,7 +139,7 @@ test('recovery has a visible Save action and errors leave room for editing', asy
   await expect(page.locator('#save-status')).toContainText('Not saved');
   await fits(page,['#save-now','#reload-file','#save-copy','#save-status','#editor']);
   expect((await page.locator('#editor').boundingBox())!.height).toBeGreaterThan(60);
-  await expect(page).toHaveScreenshot('save-error.png', {scale:'css',style:screenshotStyle});
+  await expect(page).toHaveScreenshot('save-error.png', {scale:'css'});
   await page.screenshot({scale:'css',path:info.outputPath('save-error.png')});
 });
 

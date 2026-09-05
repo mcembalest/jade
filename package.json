@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node engine/web/build.mjs",
+    "build": "npm run typecheck && node engine/web/build.mjs",
     "test": "npm run build && go test -race ./... && playwright test",
     "test:setup": "playwright install chromium webkit",
-    "test:report": "playwright show-report .tmp/test-report"
+    "test:report": "playwright show-report .tmp/test-report",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.0",
@@ -20,6 +21,8 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "esbuild": "0.28.2"
+    "@types/node": "26.4.1",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
   }
 }

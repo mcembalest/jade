@@ -11,8 +11,8 @@
 | [web/page.html](web/page.html) | Page template |
 | [web/style.css](web/style.css) | Editor layout |
 | [web/preview.css](web/preview.css) | Preview styles |
-| [web/editor.js](web/editor.js) | Editor behavior |
-| [web/terminal.js](web/terminal.js) | Terminal controls |
+| [web/editor.ts](web/editor.ts) | Editor behavior |
+| [web/terminal.ts](web/terminal.ts) | Terminal controls |
 | [web/build.mjs](web/build.mjs) | Frontend build → `web/dist/` |
 
 ```sh

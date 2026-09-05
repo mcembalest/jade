@@ -1,11 +1,13 @@
-export function initTerminals(body, status) {
-  const terminalToggle = document.querySelector("#terminal-toggle");
-  const terminalSelect = document.querySelector("#terminal-select");
-  const notice = document.querySelector('#terminal-notice');
-  function report(message) { status.textContent = message; notice.hidden = !message; }
-  document.querySelector('#dismiss-terminal').addEventListener('click', () => report(''));
-  const request = (url, options) => fetch(url, {...options, signal:AbortSignal.timeout(10000)});
-  function showTerminals(result) {
+interface Terminals { apps: {name: string; path: string}[]; selected: string; overridden: boolean }
+
+export function initTerminals(body: HTMLElement, status: HTMLElement) {
+  const terminalToggle = document.querySelector<HTMLButtonElement>("#terminal-toggle")!;
+  const terminalSelect = document.querySelector<HTMLSelectElement>("#terminal-select")!;
+  const notice = document.querySelector<HTMLElement>('#terminal-notice')!;
+  function report(message: string) { status.textContent = message; notice.hidden = !message; }
+  document.querySelector<HTMLButtonElement>('#dismiss-terminal')!.addEventListener('click', () => report(''));
+  const request = (url: string, options?: RequestInit) => fetch(url, {...options, signal:AbortSignal.timeout(10000)});
+  function showTerminals(result: Terminals) {
     terminalSelect.replaceChildren(...result.apps.map(app => new Option(app.name, app.path)));
     terminalSelect.value = result.selected;
     terminalSelect.disabled = result.overridden;
@@ -24,11 +26,11 @@ export function initTerminals(body, status) {
     try {
       const data = new FormData(); data.set("terminal", terminalSelect.value);
       const response = await request("/terminal/preference", {method:"POST", body:data});
-      const result = await response.json();
+      const result: Terminals & {error?: string} = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save terminal preference");
       showTerminals(result);
     } catch (error) {
-      report(error.message);
+      report((error instanceof Error ? error.message : String(error)));
       terminalSelect.disabled = false;
       await loadTerminals();
     } finally {
@@ -41,12 +43,12 @@ export function initTerminals(body, status) {
     terminalToggle.disabled = true;
     terminalToggle.textContent = "Opening…";
     try {
-      const data = new FormData(); data.set("jade", body.dataset.jade);
+      const data = new FormData(); data.set("jade", body.dataset.jade!);
       const response = await request("/terminal", {method:"POST", body:data});
-      const result = await response.json();
+      const result: {message: string; error?: string} = await response.json();
       report(response.ok ? result.message : (result.error || "Could not open terminal"));
     } catch (error) {
-      report("Could not open terminal: " + error.message);
+      report("Could not open terminal: " + (error instanceof Error ? error.message : String(error)));
     } finally {
       terminalToggle.disabled = false;
       terminalToggle.textContent = "Open terminal";
