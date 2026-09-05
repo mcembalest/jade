@@ -12,7 +12,7 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
   workspace: async ({}, use) => {
     const directory = await mkdtemp(join(tmpdir(), 'jade-e2e-'));
     const workspace = join(directory, 'workspace');
-    await cp('tests/fixtures/workspace', workspace, { recursive: true });
+    await cp('tests/fixtures/workspace', workspace, { recursive: true, verbatimSymlinks: true });
     await mkdir(join(directory, 'home'));
     try { await use(workspace); } finally { await rm(directory, { recursive: true, force: true }); }
   },

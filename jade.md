@@ -34,4 +34,4 @@ go run ./cmd/jade --no-open .
 
 `cmd/` launches. `engine/` runs the editor. `examples/mnist/` explores. `tests/` checks the browser workflows.
 
-Frontend source lives in `engine/web/`; commit rebuilt `web/dist/` assets so `go install` stays self-contained. Test reports live in `.tmp/` (`npm run test:report`). `README.md` points here—one introduction to maintain.
+Frontend source lives in `engine/web/`; commit rebuilt `web/dist/` assets so `go install` stays self-contained. Test reports live in `.tmp/` (`npm run test:report`). Each `README.md` points to its folder's `jade.md`—one introduction to maintain.
