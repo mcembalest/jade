@@ -34,15 +34,19 @@ type companionMessage struct {
 	Text      string            `json:"text"`
 	Sources   []companionSource `json:"sources,omitempty"`
 	Proactive bool              `json:"proactive,omitempty"`
+	FoundAt   int64             `json:"foundAt,omitempty"`
 }
 type companionState struct {
-	Messages   []companionMessage `json:"messages"`
-	Enabled    bool               `json:"enabled"`
-	Next       int64              `json:"next"`
-	Seen       string             `json:"seen"`
-	DailyDate  string             `json:"dailyDate,omitempty"`
-	RetryAfter int64              `json:"retryAfter,omitempty"`
-	Generation uint64             `json:"generation,omitempty"`
+	Messages        []companionMessage `json:"messages"`
+	Enabled         bool               `json:"enabled"`
+	Next            int64              `json:"next"`
+	Seen            string             `json:"seen"`
+	DailyDate       string             `json:"dailyDate,omitempty"`
+	ResearchNext    int64              `json:"researchNext"`
+	ResearchChecked int64              `json:"researchChecked,omitempty"`
+	ResearchError   string             `json:"researchError,omitempty"`
+	Pending         []companionMessage `json:"pending"`
+	Generation      uint64             `json:"generation,omitempty"`
 }
 
 // Use calendar days in the host's local timezone, including daylight-saving changes.
@@ -51,13 +55,13 @@ func (s *companionState) schedule(now time.Time) {
 	if s.DailyDate >= now.Format("2006-01-02") {
 		evening = evening.AddDate(0, 0, 1)
 	}
-	s.Next = max(evening.UnixMilli(), s.RetryAfter)
+	s.Next = evening.UnixMilli()
 }
 
 func (s *companionState) append(role, text string, sources []companionSource, proactive bool) {
 	var id [16]byte
 	_, _ = rand.Read(id[:])
-	s.Messages = append(s.Messages, companionMessage{hex.EncodeToString(id[:]), role, text, sources, proactive})
+	s.Messages = append(s.Messages, companionMessage{ID: hex.EncodeToString(id[:]), Role: role, Text: text, Sources: sources, Proactive: proactive})
 	if len(s.Messages) > 100 {
 		s.Messages = s.Messages[len(s.Messages)-100:]
 	}
@@ -92,7 +96,7 @@ func (a *app) companionAt(response http.ResponseWriter, request *http.Request, n
 				http.Error(response, "Write a message of up to 8,000 bytes", 400)
 				return
 			}
-		case "discover", "enabled", "seen":
+		case "discover", "research", "enabled", "seen":
 		default:
 			http.Error(response, "Unknown companion action", 400)
 			return
@@ -156,13 +160,32 @@ func (a *app) companionAt(response http.ResponseWriter, request *http.Request, n
 		}
 	case "seen":
 		state.Seen = input.Seen
-	case "chat", "discover":
-		proactive := input.Action == "discover"
+	case "discover":
+		if state.Enabled && now.UnixMilli() >= state.Next && len(state.Pending) > 0 {
+			texts := []string{"Daily update"}
+			sources := []companionSource{}
+			urls := map[string]bool{}
+			for _, finding := range state.Pending {
+				texts = append(texts, finding.Text)
+				for _, source := range finding.Sources {
+					if !urls[source.URL] {
+						sources = append(sources, source)
+						urls[source.URL] = true
+					}
+				}
+			}
+			state.append("assistant", strings.Join(texts, "\n\n"), sources, true)
+			state.Pending = nil
+			state.DailyDate = now.Format("2006-01-02")
+			state.schedule(now)
+		}
+	case "chat", "research":
+		proactive := input.Action == "research"
 		if !state.Enabled && !proactive {
 			http.Error(response, "Show Sanjana before sending a message", 409)
 			return
 		}
-		if !state.Enabled || (proactive && now.UnixMilli() < state.Next) {
+		if !state.Enabled || (proactive && (now.UnixMilli() < state.ResearchNext || len(state.Pending) >= 24)) {
 			writeJSON(response, 200, state)
 			return
 		}
@@ -172,10 +195,10 @@ func (a *app) companionAt(response http.ResponseWriter, request *http.Request, n
 			http.Error(response, "Sanjana is already thinking. Try again shortly.", 409)
 			return
 		}
-		// Reserve an hourly retry before contacting Codex. Failed or quiet searches
-		// cannot loop; chats and hide/restore cannot reset the daily limit.
+		// Reserve before starting: multiple windows, failures and reloads cannot
+		// multiply research requests. Daily delivery has a separate clock.
 		if proactive {
-			state.RetryAfter = now.Add(time.Hour).UnixMilli()
+			state.ResearchNext = now.Add(time.Hour).UnixMilli()
 			state.schedule(now)
 		}
 		generation := state.Generation
@@ -187,13 +210,18 @@ func (a *app) companionAt(response http.ResponseWriter, request *http.Request, n
 			http.Error(response, "Cannot unlock companion history", 500)
 			return
 		}
-		ctx, cancel := context.WithTimeout(request.Context(), 3*time.Minute)
-		defer cancel()
-		answer, sources, err := runCompanion(ctx, state.Messages, input.Message, proactive)
-		if err != nil {
-			http.Error(response, err.Error(), http.StatusServiceUnavailable)
-			return
+		timeout := 3 * time.Minute
+		if proactive {
+			timeout = 90 * time.Second
 		}
+		ctx, cancel := context.WithTimeout(request.Context(), timeout)
+		defer cancel()
+		pending, _ := json.Marshal(state.Pending)
+		message := "Already collected pending findings (avoid repeating them):\n" + string(pending)
+		if !proactive {
+			message += "\nMax's message:\n" + input.Message
+		}
+		answer, sources, runErr := runCompanion(ctx, state.Messages, message, proactive)
 		lockCtx, lockCancel := context.WithTimeout(request.Context(), 2*time.Second)
 		defer lockCancel()
 		if acquired, err := lock.TryLockContext(lockCtx, 25*time.Millisecond); err != nil || !acquired {
@@ -209,16 +237,33 @@ func (a *app) companionAt(response http.ResponseWriter, request *http.Request, n
 			http.Error(response, "Sanjana was hidden; the reply was stopped", 409)
 			return
 		}
-		if !proactive {
-			state.append("user", input.Message, nil, false)
-		}
 		finished := now.Add(time.Since(started))
-		if answer != "" {
-			if proactive {
-				state.DailyDate = finished.Format("2006-01-02")
-				state.RetryAfter = 0
+		if proactive {
+			state.ResearchChecked = finished.UnixMilli()
+			state.ResearchError = ""
+			if runErr != nil {
+				state.ResearchError = runErr.Error()
 			}
-			state.append("assistant", answer, sources, proactive)
+			if runErr == nil && answer != "" && len(sources) > 0 {
+				duplicate := false
+				for _, finding := range state.Pending {
+					for _, prior := range finding.Sources {
+						if prior.URL == sources[0].URL {
+							duplicate = true
+						}
+					}
+				}
+				if !duplicate {
+					state.Pending = append(state.Pending, companionMessage{Text: answer, Sources: sources, FoundAt: finished.UnixMilli()})
+				}
+			}
+		} else {
+			if runErr != nil {
+				http.Error(response, runErr.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			state.append("user", input.Message, nil, false)
+			state.append("assistant", answer, sources, false)
 		}
 		state.schedule(finished)
 	}
@@ -359,11 +404,15 @@ Character profile:
 	}
 	prompt := "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nMax's new message:\n" + message
 	if proactive {
-		prompt = "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nDaily evening opportunity: optionally search the web for something you want to share with Max based on your interests and this conversation. Choose one worthwhile discovery for today's update; otherwise return an empty message."
+		prompt = "Current date/time: " + time.Now().Format(time.RFC3339) + "\nRecent conversation (JSON):\n" + string(recent) + "\nQuiet background research: use web search to collect one new finding related to the character notes and recent conversation. Rotate interests across runs. Use at most two searches and one follow-up page. Return a factual summary of at most 600 characters and up to three original source links. This will be saved for later, not sent as a chat message. Do not repeat pending or previously delivered findings. If nothing new is worthwhile, return an empty message and sources array.\n" + message
 	}
 	sourceSchema := map[string]any{"type": "object", "properties": map[string]any{"title": map[string]string{"type": "string"}, "url": map[string]string{"type": "string"}}, "required": []string{"title", "url"}, "additionalProperties": false}
 	schema := map[string]any{"type": "object", "properties": map[string]any{"message": map[string]string{"type": "string"}, "sources": map[string]any{"type": "array", "items": sourceSchema}}, "required": []string{"message", "sources"}, "additionalProperties": false}
-	if err = rpc.call("turn/start", map[string]any{"threadId": thread.Thread.ID, "input": []any{map[string]string{"type": "text", "text": prompt}}, "outputSchema": schema}, nil); err != nil {
+	turn := map[string]any{"threadId": thread.Thread.ID, "input": []any{map[string]string{"type": "text", "text": prompt}}, "outputSchema": schema}
+	if proactive {
+		turn["effort"] = "low"
+	}
+	if err = rpc.call("turn/start", turn, nil); err != nil {
 		return "", nil, err
 	}
 	answer := ""
@@ -415,13 +464,16 @@ Character profile:
 	if err = json.Unmarshal([]byte(answer), &reply); err != nil || len(reply.Message) > 16000 || (!proactive && strings.TrimSpace(reply.Message) == "") {
 		return "", nil, errors.New("Sanjana returned an incomplete reply. Try again.")
 	}
+	if proactive && len([]rune(reply.Message)) > 600 {
+		return "", nil, errors.New("Research summary exceeded its size limit; another attempt will run in an hour")
+	}
 	sources := []companionSource{}
 	for _, s := range reply.Sources {
 		u, err := url.Parse(s.URL)
 		if err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != "" && len(s.URL) < 4096 {
 			sources = append(sources, s)
 		}
-		if len(sources) == 10 {
+		if len(sources) == 10 || (proactive && len(sources) == 3) {
 			break
 		}
 	}

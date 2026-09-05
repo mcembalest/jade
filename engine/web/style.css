@@ -99,6 +99,10 @@ dialog::backdrop { background:#17201b4a; }
 #companion-card h2 { font:normal 23px/1.2 Georgia,serif; margin:6px 0 0; }
 #companion-close { border:0; background:transparent; font-size:21px; padding:0 6px; }
 .companion-intro { color:#68736d; line-height:1.6; margin:14px 0 18px; }
+#companion-research { display:flex; flex-direction:column; gap:8px; max-height:200px; overflow:auto; overflow-wrap:anywhere; margin:8px 0; line-height:1.5; }
+#companion-research-panel summary { cursor:pointer; font-weight:600; color:var(--jade); }
+#companion-research-count { font-size:11px; margin-left:6px; }
+#companion-research-status { margin:8px 0; }
 #companion-chat { display:flex; flex-direction:column; gap:12px; max-height:260px; overflow:auto; margin:16px 0; overflow-wrap:anywhere; }
 .companion-message { background:#f2f5ed; padding:12px; border-radius:12px; line-height:1.5; }
 .companion-message[data-role="user"] { background:#eee8de; margin-left:22px; }

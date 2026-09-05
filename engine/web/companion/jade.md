@@ -26,23 +26,27 @@ Live chat uses `codex` from `PATH`, ChatGPT subscription authentication, and the
 | Still animation | Stop animation; system reduced-motion preferences also apply |
 | Escape / close / click outside | Dismiss the popover |
 
-## Discovery schedule
+## Research and delivery
 
-- At most one proactive update per local calendar day, starting at 8pm in the JaDE host computer’s timezone.
-- If JaDE opens later that evening, the update can run then. Earlier sessions wait until 8pm. Missed days do not accumulate; there is no morning catch-up.
-- Open JaDE pages check the shared deadline approximately every 15 seconds. Browser timer throttling and computer sleep can delay an opportunity. No searches run after all JaDE pages close.
-- If a search fails or Sanjana finds nothing worth sharing, she can try again after an hour while active that evening. After she posts, the next opportunity is the following evening.
-- Chat remains available at any time. Chats, restarts, and hide/show do not reset the daily limit or postpone the evening update.
-- One shared deadline and one in-flight request across tabs and JaDE processes for the same OS user. Existing chat history is preserved when upgrading from the random-interval schedule.
-- Discoveries use a speech bubble without opening the popover or moving keyboard focus.
-- Requests use the same subscription allowance as other Codex work. Rate-limit and sign-in errors appear in chat.
+- Quiet research starts when JaDE is open and Sanjana is enabled, then runs at most once an hour across all JaDE windows. Missed hours do not accumulate.
+- Each research turn uses the configured Codex model with low reasoning effort and a 90-second timeout. The prompt requests at most two searches, one follow-up page, one finding of at most 600 characters, and up to three original source links.
+- Pending research in the popup shows all collected findings, their collection times, source links, the last completed check, and any research error. Opening the popup does not send a notification or clear pending findings.
+- Research includes the character notes, recent conversation, and pending findings as context. Duplicate primary source URLs within pending research are skipped. Unsourced findings are not saved.
+- At 8pm in the JaDE host computer’s local timezone, pending findings are combined into one daily chat update and speech bubble. Delivery uses no additional model call. The findings remain in chat history after leaving the pending list.
+- At most one proactive update per local calendar day. Research continues afterward for the next update. If no findings are ready at 8pm, the next successful research can supply that evening’s update.
+- Late openings can deliver that evening; missed days do not create multiple notifications. Before 8pm, pending findings remain available for manual check-ins.
+- Pending research survives restarts. At 24 pending findings, research pauses until daily delivery frees space; existing findings are not dropped.
+- Browser timer throttling and computer sleep can delay work. No research runs after all JaDE pages close. Hiding Sanjana pauses research and delivery without resetting their deadlines.
+- Chat remains available at any time. Sending a chat message stops research running in the same page, and includes pending findings as context.
+- Open pages check shared state approximately every 15 seconds. Errors wait until the next hourly opportunity instead of retrying continuously.
+- Requests use the same subscription allowance as other Codex work.
 
 ## Character and history
 
 | Data | Location / behavior |
 | --- | --- |
 | Character guidance | [character.md](character.md), embedded at build time |
-| Saved chat, visibility, deadline, read status | `JaDE/companion/chat.json` under the OS user configuration directory |
+| Saved chat, pending research, check status, visibility, deadlines, read status | `JaDE/companion/chat.json` under the OS user configuration directory |
 | macOS configuration directory | `~/Library/Application Support` |
 | Saved history | Latest 100 messages; latest 40 messages, bounded to 64 KB, supplied as context |
 | Animation preference | Browser local storage, per origin |

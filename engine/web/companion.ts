@@ -51,8 +51,8 @@ export function initCompanion() {
   motion.addEventListener('change', () => { save('jade.companion.still', String(motion.checked)); frame = 0; animate(); });
   reduced.addEventListener('change', () => { frame = 0; animate(); });
   document.addEventListener('visibilitychange', () => { frame = 0; animate(); });
-  type Message = { id: string; role: string; text: string; sources?: {title: string; url: string}[]; proactive?: boolean };
-  type State = { messages: Message[]; enabled: boolean; next: number; seen: string };
+  type Message = { id: string; role: string; text: string; sources?: {title: string; url: string}[]; proactive?: boolean; foundAt?: number };
+  type State = { messages: Message[]; enabled: boolean; next: number; seen: string; pending?: Message[]; researchNext?: number; researchChecked?: number; researchError?: string };
   const chat = document.querySelector<HTMLElement>('#companion-chat')!;
   const input = document.querySelector<HTMLTextAreaElement>('#companion-input')!;
   const status = document.querySelector<HTMLElement>('#companion-status')!;
@@ -61,15 +61,41 @@ export function initCompanion() {
   const bubble = document.querySelector<HTMLButtonElement>('#companion-bubble')!;
   let state: State | undefined;
   let active: AbortController | undefined;
+  let activeAction = '';
+  let finishedActive = Promise.resolve();
+  const research = document.querySelector<HTMLElement>('#companion-research')!;
+  const researchStatus = document.querySelector<HTMLElement>('#companion-research-status')!;
+  const researchCount = document.querySelector<HTMLElement>('#companion-research-count')!;
+  let renderedResearch = '';
   let checking = false;
   let rendered = '';
   let seenPending = '';
   let visibilityVersion = 0;
 
   async function api(body?: object, signal?: AbortSignal): Promise<State> {
-    const response = await fetch('/companion', body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal} : {signal, headers:{'X-JaDE-Companion-Hidden':String(hidden)}});
+    const options: RequestInit = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal} : {signal, headers:{'X-JaDE-Companion-Hidden':String(hidden)}};
+    let response = await fetch('/companion', options);
+    // An aborted research process may need a moment to release its shared lock.
+    if (response.status === 409 && (body as {action?: string})?.action === 'chat') {
+      await new Promise(resolve => window.setTimeout(resolve, 250));
+      response = await fetch('/companion', options);
+    }
     if (!response.ok) throw new Error(await response.text());
     return response.json();
+  }
+  function messageRow(message: Message) {
+    const row = document.createElement('div'); row.className = 'companion-message'; row.dataset.role = message.role;
+    const author = document.createElement('strong'); author.textContent = message.foundAt ? new Date(message.foundAt).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : message.role === 'user' ? 'You' : 'Sanjana';
+    const text = document.createElement('p'); text.textContent = message.text;
+    row.append(author, text);
+    for (const source of message.sources || []) {
+      try {
+        const url = new URL(source.url);
+        if (!['https:', 'http:'].includes(url.protocol)) continue;
+        const link = document.createElement('a'); link.href = url.href; link.textContent = source.title || url.hostname; link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link);
+      } catch { /* Ignore malformed source links. */ }
+    }
+    return row;
   }
   function render(next: State) {
     state = next;
@@ -85,22 +111,24 @@ export function initCompanion() {
       rendered = serialized;
       chat.replaceChildren();
       for (const message of next.messages) {
-        const row = document.createElement('div'); row.className = 'companion-message'; row.dataset.role = message.role;
-        const author = document.createElement('strong'); author.textContent = message.role === 'user' ? 'You' : 'Sanjana';
-        const text = document.createElement('p'); text.textContent = message.text;
-        row.append(author, text);
-        for (const source of message.sources || []) {
-          try {
-            const url = new URL(source.url);
-            if (!['https:', 'http:'].includes(url.protocol)) continue;
-            const link = document.createElement('a'); link.href = url.href; link.textContent = source.title || url.hostname; link.target = '_blank'; link.rel = 'noopener noreferrer'; row.append(link);
-          } catch { /* Ignore malformed source links. */ }
-        }
+        const row = messageRow(message);
         chat.append(row);
       }
       if (!next.messages.length) chat.textContent = 'Tell me what you’re in the mood for, or ask me to search.';
       chat.scrollTop = chat.scrollHeight;
     }
+    const pending = next.pending || [];
+    const pendingJSON = JSON.stringify(pending);
+    if (pendingJSON !== renderedResearch) {
+      renderedResearch = pendingJSON;
+      research.replaceChildren(...pending.map(messageRow));
+      if (!pending.length) research.textContent = 'No pending findings yet. New research will appear here as it is collected.';
+    }
+    researchCount.textContent = String(pending.length);
+    researchStatus.textContent = activeAction === 'research' && active ? 'Researching…' :
+      next.researchError ? next.researchError :
+      pending.length >= 24 ? '24 findings pending. Research resumes after the daily update.' :
+      next.researchChecked ? 'Last checked ' + new Date(next.researchChecked).toLocaleString() : 'Research starts while Sanjana is enabled.';
     const latest = [...next.messages].reverse().find(message => message.role === 'assistant');
     bubble.hidden = hidden || !latest?.proactive || latest.id === next.seen || card.matches(':popover-open');
     bubble.textContent = latest?.text.slice(0,140) || '';
@@ -117,24 +145,33 @@ export function initCompanion() {
       const next = await api();
       if (version !== visibilityVersion) return;
       render(next);
-      if (!hidden && state && Date.now() >= state.next) await talk(true);
+      if (!hidden && state && Date.now() >= state.next && state.pending?.length) await talk('discover');
+      if (!hidden && state && state.researchNext !== undefined && Date.now() >= state.researchNext && (state.pending?.length || 0) < 24) {
+        await talk('research');
+        if (state && Date.now() >= state.next && state.pending?.length) await talk('discover');
+      }
     } catch (error) { status.textContent = (error as Error).message; }
     finally { checking = false; }
   }
-  async function talk(proactive: boolean) {
+  async function talk(action: 'chat' | 'discover' | 'research') {
+    if (active && action === 'chat' && activeAction === 'research') { active.abort(); await finishedActive; }
     if (active || hidden) return;
+    const proactive = action !== 'chat';
     const message = input.value.trim();
     if (!proactive && !message) return;
-    const controller = new AbortController(); active = controller;
-    send.disabled = true; stop.hidden = false;
-    status.textContent = proactive ? 'Exploring a little…' : 'Thinking…';
+    const controller = new AbortController(); active = controller; activeAction = action;
+    let finish!: () => void;
+    finishedActive = new Promise<void>(resolve => { finish = resolve; });
+    send.disabled = action !== 'research'; stop.hidden = false;
+    status.textContent = proactive ? '' : 'Thinking…';
+    if (action === 'research') researchStatus.textContent = 'Researching…';
     try {
-      render(await api({action:proactive ? 'discover' : 'chat', message}, controller.signal));
+      render(await api({action, message: proactive ? undefined : message}, controller.signal));
       if (!proactive && input.value.trim() === message) input.value = '';
       status.textContent = '';
     } catch (error) {
       status.textContent = controller.signal.aborted ? 'Stopped.' : (error as Error).message;
-    } finally { active = undefined; send.disabled = false; stop.hidden = true; }
+    } finally { active = undefined; activeAction = ''; send.disabled = false; stop.hidden = true; if (state) render(state); finish(); }
   }
   async function setEnabled(enabled: boolean) {
     const version = ++visibilityVersion;
@@ -144,14 +181,14 @@ export function initCompanion() {
     try { const next = await api({action:'enabled', enabled}); if (version === visibilityVersion) render(next); }
     catch (error) { status.textContent = (error as Error).message; }
   }
-  document.querySelector('#companion-form')!.addEventListener('submit', event => { event.preventDefault(); void talk(false); });
+  document.querySelector('#companion-form')!.addEventListener('submit', event => { event.preventDefault(); void talk('chat'); });
   input.addEventListener('keydown', event => {
-    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); void talk(false); }
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); void talk('chat'); }
   });
   stop.addEventListener('click', () => active?.abort());
   document.querySelector('#companion-hide')!.addEventListener('click', () => { void setEnabled(false); });
   restore.addEventListener('click', () => { void setEnabled(true); });
-  card.addEventListener('toggle', () => { if (state) render(state); });
+  card.addEventListener('toggle', () => { if (state) render(state); if (card.matches(':popover-open')) void refresh(); });
   window.addEventListener('pagehide', () => active?.abort());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
   window.setInterval(() => { void refresh(); }, 15_000);

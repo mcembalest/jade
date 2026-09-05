@@ -47,6 +47,9 @@ func TestCompanionCodexProcess(t *testing.T) {
 			}
 			result = map[string]any{"thread": map[string]string{"id": "sanjana"}}
 		case "turn/start":
+			if strings.Contains(fmt.Sprint(p.Params["input"]), "Quiet background research") && p.Params["effort"] != "low" {
+				os.Exit(6)
+			}
 			send(map[string]any{"id": p.ID, "result": result})
 			if os.Getenv("JADE_FAKE_MODE") == "wait" {
 				time.Sleep(time.Minute)
@@ -94,7 +97,11 @@ func TestCompanionProtocol(t *testing.T) {
 	for _, mode := range []string{"normal", "quiet", "bad", "wait"} {
 		t.Run(mode, func(t *testing.T) {
 			t.Setenv("JADE_FAKE_MODE", mode)
-			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+			timeout := 3 * time.Second
+			if mode == "wait" {
+				timeout = 300 * time.Millisecond
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 			text, sources, err := runCompanion(ctx, nil, "search", mode == "quiet")
 			switch mode {
@@ -142,6 +149,9 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 		return s
 	}
 	s := call("")
+	if s.ResearchNext != 0 {
+		t.Fatal("new research should be due immediately")
+	}
 	if s.Next != now.Add(time.Minute).UnixMilli() {
 		t.Fatal("not scheduled for 8pm", s.Next)
 	}
@@ -178,6 +188,10 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 	s.Next = 1
 	raw, _ = json.Marshal(s)
 	_ = os.WriteFile(path, raw, 0600)
+	s = call(`{"action":"research"}`)
+	if len(s.Pending) != 1 || len(s.Messages) != 2 {
+		t.Fatal("research did not stay pending", s)
+	}
 	now = now.Add(time.Minute)
 	s = call(`{"action":"discover"}`)
 	if s.DailyDate != "2026-09-05" || s.Next != now.AddDate(0, 0, 1).UnixMilli() {
@@ -200,6 +214,7 @@ func TestCompanionHistoryAndSchedule(t *testing.T) {
 		t.Fatal("reload lost daily limit")
 	}
 	now = now.AddDate(0, 0, 3)
+	call(`{"action":"research"}`)
 	if len(call(`{"action":"discover"}`).Messages) != 4 {
 		t.Fatal("missed evenings did not resume")
 	}
@@ -304,6 +319,14 @@ func TestCompanionLive(t *testing.T) {
 	if len(sources) == 0 {
 		t.Fatal("no sources")
 	}
+	answer, sources, err = runCompanion(ctx, nil, "Pending findings: []", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Log("Research:", answer, sources)
+	if answer != "" && len(sources) == 0 {
+		t.Fatal("unsourced research")
+	}
 }
 
 func TestCompanionEveningSchedule(t *testing.T) {
@@ -324,7 +347,7 @@ func TestCompanionEveningSchedule(t *testing.T) {
 		{"late opening", "2026-09-05 22:00", "", "", "2026-09-05 20:00"},
 		{"already delivered", "2026-09-05 21:00", "2026-09-05", "", "2026-09-06 20:00"},
 		{"missed days", "2026-09-09 21:00", "2026-09-05", "", "2026-09-09 20:00"},
-		{"hourly retry", "2026-09-05 20:30", "", "2026-09-05 21:00", "2026-09-05 21:00"},
+		{"research does not postpone delivery", "2026-09-05 20:30", "", "2026-09-05 21:00", "2026-09-05 20:00"},
 		{"no morning catchup", "2026-09-06 00:20", "", "2026-09-06 00:30", "2026-09-06 20:00"},
 		{"spring forward", "2026-03-07 21:00", "2026-03-07", "", "2026-03-08 20:00"},
 		{"fall back", "2026-10-31 21:00", "2026-10-31", "", "2026-11-01 20:00"},
@@ -332,7 +355,7 @@ func TestCompanionEveningSchedule(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := companionState{DailyDate: tc.delivered, Next: 1}
 			if tc.retry != "" {
-				s.RetryAfter = parse(tc.retry).UnixMilli()
+				s.ResearchNext = parse(tc.retry).UnixMilli()
 			}
 			s.schedule(parse(tc.now))
 			if s.Next != parse(tc.want).UnixMilli() {
@@ -342,45 +365,92 @@ func TestCompanionEveningSchedule(t *testing.T) {
 	}
 }
 
-func TestCompanionDailyRetry(t *testing.T) {
+func TestCompanionResearchAndDelivery(t *testing.T) {
 	fakeCompanion(t)
 	application := testApp(t)
-	now := time.Date(2026, 9, 5, 20, 0, 0, 0, time.Local)
-	call := func(action string) *httptest.ResponseRecorder {
+	now := time.Date(2026, 9, 5, 10, 0, 0, 0, time.Local)
+	call := func(action string) companionState {
+		t.Helper()
 		req := httptest.NewRequest("POST", "http://127.0.0.1:7333/companion", strings.NewReader(`{"action":"`+action+`"}`))
+		if action == "" {
+			req = httptest.NewRequest("GET", "http://127.0.0.1:7333/companion", nil)
+		}
 		rec := httptest.NewRecorder()
 		application.companionAt(rec, req, now)
-		return rec
+		if rec.Code != 200 {
+			t.Fatalf("%d %s", rec.Code, rec.Body.String())
+		}
+		var s companionState
+		if err := json.Unmarshal(rec.Body.Bytes(), &s); err != nil {
+			t.Fatal(err)
+		}
+		return s
 	}
 	t.Setenv("JADE_FAKE_MODE", "bad")
-	if rec := call("discover"); rec.Code != 503 {
-		t.Fatal(rec.Code)
+	s := call("research")
+	if s.ResearchError == "" || s.ResearchNext != now.Add(time.Hour).UnixMilli() {
+		t.Fatal("failure not saved/throttled", s)
 	}
 	now = now.Add(59 * time.Minute)
-	var s companionState
-	rec := call("discover")
-	_ = json.Unmarshal(rec.Body.Bytes(), &s)
-	if rec.Code != 200 || s.DailyDate != "" || len(s.Messages) != 0 {
-		t.Fatal("failure retried too early", rec.Code, s)
+	t.Setenv("JADE_FAKE_MODE", "normal")
+	if len(call("research").Pending) != 0 {
+		t.Fatal("early retry")
 	}
 	now = now.Add(time.Minute)
 	t.Setenv("JADE_FAKE_MODE", "quiet")
-	rec = call("discover")
-	_ = json.Unmarshal(rec.Body.Bytes(), &s)
-	if rec.Code != 200 || s.Next != now.Add(time.Hour).UnixMilli() || s.DailyDate != "" {
-		t.Fatal("quiet result did not defer an hour", s)
+	s = call("research")
+	if s.ResearchNext != now.Add(time.Hour).UnixMilli() || s.ResearchError != "" || len(s.Pending) != 0 {
+		t.Fatal("quiet retry", s)
 	}
 	now = now.Add(time.Hour)
 	t.Setenv("JADE_FAKE_MODE", "normal")
-	rec = call("discover")
-	_ = json.Unmarshal(rec.Body.Bytes(), &s)
-	if rec.Code != 200 || len(s.Messages) != 1 || s.DailyDate != "2026-09-05" {
-		t.Fatal("retry did not deliver", s)
+	s = call("research")
+	if len(s.Pending) != 1 || len(s.Messages) != 0 || s.DailyDate != "" {
+		t.Fatal("daytime research sent a message", s)
+	}
+	if len(call("").Pending) != 1 {
+		t.Fatal("pending research lost on reload")
+	}
+	if len(call("discover").Messages) != 0 {
+		t.Fatal("delivered before 8pm")
 	}
 	now = now.Add(time.Hour)
-	rec = call("discover")
-	_ = json.Unmarshal(rec.Body.Bytes(), &s)
-	if rec.Code != 200 || len(s.Messages) != 1 {
-		t.Fatal("extra daily update", s)
+	if len(call("research").Pending) != 1 {
+		t.Fatal("duplicate source added")
+	}
+	now = time.Date(2026, 9, 5, 20, 0, 0, 0, time.Local)
+	t.Setenv("JADE_FAKE_MODE", "bad") // Daily delivery must not invoke the model.
+	s = call("discover")
+	if len(s.Pending) != 0 || len(s.Messages) != 1 || len(s.Messages[0].Sources) != 1 || s.DailyDate != "2026-09-05" {
+		t.Fatal("daily digest", s)
+	}
+	t.Setenv("JADE_FAKE_MODE", "normal")
+	s = call("research")
+	if len(s.Pending) != 1 || len(s.Messages) != 1 {
+		t.Fatal("research did not continue after daily delivery", s)
+	}
+	if len(call("discover").Messages) != 1 {
+		t.Fatal("extra daily bubble")
+	}
+	now = now.AddDate(0, 0, 1)
+	s = call("discover")
+	if len(s.Pending) != 0 || len(s.Messages) != 2 {
+		t.Fatal("next evening", s)
+	}
+	// A full queue pauses spending without dropping findings.
+	config, _ := os.UserConfigDir()
+	path := filepath.Join(config, "JaDE", "companion", "chat.json")
+	s.Pending = make([]companionMessage, 24)
+	for i := range s.Pending {
+		s.Pending[i] = companionMessage{Text: fmt.Sprint(i), FoundAt: now.UnixMilli()}
+	}
+	s.ResearchNext = 0
+	raw, _ := json.Marshal(s)
+	if err := os.WriteFile(path, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	s = call("research")
+	if len(s.Pending) != 24 || s.ResearchNext != 0 {
+		t.Fatal("full queue changed", s)
 	}
 }
