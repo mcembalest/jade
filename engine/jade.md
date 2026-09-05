@@ -1,14 +1,22 @@
-# JaDE engine
+# Engine
 
-[http.go](http.go) handles requests and Markdown previews. The rest of the engine is organized by responsibility:
+| File | Responsibility |
+| --- | --- |
+| [http.go](http.go) | HTTP routes, Markdown previews |
+| [workspace.go](workspace.go) | Workspace discovery, file trees, path boundaries |
+| [save.go](save.go) | Revision checks, atomic saves |
+| [drafts.go](drafts.go) | Recovery storage, locking |
+| [terminal.go](terminal.go) | Terminal discovery, launching |
+| [server.go](server.go) | Loopback listener, shutdown |
+| [web/page.html](web/page.html) | Page template |
+| [web/style.css](web/style.css) | Editor layout |
+| [web/preview.css](web/preview.css) | Preview styles |
+| [web/editor.js](web/editor.js) | Editor behavior |
+| [web/terminal.js](web/terminal.js) | Terminal controls |
+| [web/build.mjs](web/build.mjs) | Frontend build → `web/dist/` |
 
-- [workspace.go](workspace.go): workspace discovery, file trees, and path boundaries.
-- [save.go](save.go): revision checks and atomic file saves.
-- [drafts.go](drafts.go): local recovery storage and locking.
-- [terminal.go](terminal.go): external terminal discovery and launching.
-- [server.go](server.go): loopback listening and graceful shutdown.
-- [web/page.html](web/page.html), [web/style.css](web/style.css), and [web/preview.css](web/preview.css): layout and styling.
-- [web/editor.js](web/editor.js) and [web/terminal.js](web/terminal.js): browser behavior.
-- [web/build.mjs](web/build.mjs): builds the committed browser assets in `web/dist/`.
+```sh
+go test ./...
+```
 
-Go tests sit beside the code they exercise. Run `go test ./...` here; Go finds the parent module automatically. See the root README for installation and the full browser test suite.
+[Installation and browser tests](../README.md)
