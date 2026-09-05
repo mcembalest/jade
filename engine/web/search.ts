@@ -19,7 +19,9 @@ export function initSearch(openFile: (file: string, line: number) => Promise<voi
   document.querySelector('#search-close')!.addEventListener('click', () => dialog.close());
   dialog.addEventListener('close', () => {
     clearTimeout(timer); pending?.abort(); generation++;
-    if (returnFocus?.isConnected) returnFocus.focus(); else toggle.focus();
+    if (dialog.returnValue === 'edit') document.querySelector<HTMLElement>('.cm-content')?.focus();
+    else if (returnFocus?.isConnected) returnFocus.focus(); else toggle.focus();
+    dialog.returnValue = '';
   });
   async function search() {
     const version = ++generation;

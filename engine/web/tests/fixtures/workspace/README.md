@@ -1,1 +1,3 @@
-jade.md
+# Test workspace
+
+A repeatable local editing fixture.

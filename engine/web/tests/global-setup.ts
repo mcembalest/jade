@@ -4,6 +4,6 @@ import { buildSync } from 'esbuild';
 
 export default function setup() {
   mkdirSync('../../.tmp/e2e', { recursive: true });
-  execFileSync('go', ['-C', '../..', 'build', '-o', '.tmp/e2e/jade', './cmd/jade'], { stdio: 'inherit' });
+  execFileSync('go', ['-C', '../..', 'build', '-o', '.tmp/e2e/jade', '.'], { stdio: 'inherit' });
   buildSync({ entryPoints: ['tests/baseline.ts'], bundle: true, format: 'iife', outfile: '../../.tmp/e2e/baseline.js' });
 }

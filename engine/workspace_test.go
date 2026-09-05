@@ -16,20 +16,20 @@ func writeTestFile(t *testing.T, path, contents string) {
 	}
 }
 
-func TestJadeTitle(t *testing.T) {
-	if title := jadeTitle("```markdown\n# Example only\n```\n\n# A paper\n"); title != "A paper" {
+func TestHomepageTitle(t *testing.T) {
+	if title := homepageTitle("```markdown\n# Example only\n```\n\n# A paper\n"); title != "A paper" {
 		t.Fatalf("title = %q", title)
 	}
-	if title := jadeTitle("plain marker, no heading\n"); title != "Untitled JaDE" {
+	if title := homepageTitle("plain marker, no heading\n"); title != "Untitled JaDE" {
 		t.Fatalf("fallback title = %q", title)
 	}
 }
 
 func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, markerName), "# Project\n")
+	writeTestFile(t, filepath.Join(root, homepageName), "# Project\n")
 	writeTestFile(t, filepath.Join(root, "notes.md"), "ordinary note")
-	writeTestFile(t, filepath.Join(root, "synthetic", markerName), "# Synthetic data\n\n```sh\nprintf 'x\\n1\\n' > data.csv\n```\n")
+	writeTestFile(t, filepath.Join(root, "synthetic", homepageName), "# Synthetic data\n\n```sh\nprintf 'x\\n1\\n' > data.csv\n```\n")
 	writeTestFile(t, filepath.Join(root, "synthetic", "generate.go"), "package main")
 	writeTestFile(t, filepath.Join(root, ".git", "ignored.txt"), "ignored")
 	writeTestFile(t, filepath.Join(root, ".build", "generated.swift"), "ignored")
@@ -58,7 +58,7 @@ func TestWorkspaceRecursionIsJustDirectories(t *testing.T) {
 	}
 }
 
-func TestWorkspaceDoesNotRequireJadeMarker(t *testing.T) {
+func TestWorkspaceDoesNotRequireHomepage(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
 
@@ -66,15 +66,15 @@ func TestWorkspaceDoesNotRequireJadeMarker(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if workspace.HasMarker || workspace.Title != filepath.Base(root) || len(workspace.Files) != 1 || workspace.Files[0] != "main.go" {
+	if workspace.Homepage != "" || workspace.Title != filepath.Base(root) || len(workspace.Files) != 1 || workspace.Files[0] != "main.go" {
 		t.Fatalf("plain workspace = %#v", workspace)
 	}
 }
 
-func TestFilesStayInsideTheCurrentJade(t *testing.T) {
+func TestFilesStayInsideTheLaunchedFolder(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
-	writeTestFile(t, filepath.Join(root, markerName), "# Safe\n")
+	writeTestFile(t, filepath.Join(root, homepageName), "# Safe\n")
 	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
 		t.Fatal(err)
 	}
@@ -98,5 +98,53 @@ func TestFilesStayInsideTheCurrentJade(t *testing.T) {
 	}
 	if err := CreateWorkspaceFile(root, ".", "linked.md", "no"); err == nil {
 		t.Fatal("expected write through a file symlink to fail")
+	}
+}
+
+func TestNestedFoldersShareFilesWithoutRequiringHomepages(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "shared.txt"), "original")
+	writeTestFile(t, filepath.Join(root, "study", "report", "notes.txt"), "notes")
+	workspace, err := LoadWorkspace(root, "study/report")
+	if err != nil || workspace.Homepage != "" || workspace.Title != "report" {
+		t.Fatalf("nested folder = %#v, %v", workspace, err)
+	}
+	contents, err := ReadWorkspaceFile(root, "study/report", "../../shared.txt")
+	if err != nil || contents != "original" {
+		t.Fatalf("shared read = %q, %v", contents, err)
+	}
+	if err := updateWorkspaceFile(root, "study/report", "../../shared.txt", "updated", fileRevision(contents)); err != nil {
+		t.Fatal(err)
+	}
+	if contents, err := ReadWorkspaceFile(root, ".", "shared.txt"); err != nil || contents != "updated" {
+		t.Fatalf("shared write = %q, %v", contents, err)
+	}
+	if err := CreateWorkspaceFile(root, "study/report", "../../other/new.md", "shared sibling"); err != nil {
+		t.Fatal(err)
+	}
+	a, err := newApp(root, 7333)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentDraft, err := a.draftDirectory(".", "shared.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	childDraft, err := a.draftDirectory("study/report", "../../shared.txt")
+	if err != nil || childDraft != parentDraft {
+		t.Fatalf("one file must share recovery across views: %q, %q, %v", parentDraft, childDraft, err)
+	}
+	if _, err := ReadWorkspaceFile(root, "study/report", "../../../outside.txt"); err == nil {
+		t.Fatal("nested views must retain the launched folder boundary")
+	}
+}
+
+func TestReadmeIsAnOrdinaryCaseInsensitiveHomepage(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "readme.MD"), "# Mixed case\n")
+	writeTestFile(t, filepath.Join(root, "a.txt"), "first alphabetically")
+	workspace, err := LoadWorkspace(root, ".")
+	if err != nil || workspace.Homepage != "readme.MD" || workspace.Title != "Mixed case" || workspace.Files[0] != "readme.MD" {
+		t.Fatalf("homepage = %#v, %v", workspace, err)
 	}
 }

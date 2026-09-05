@@ -28,14 +28,7 @@ var draftID = regexp.MustCompile(`^[a-f0-9-]{36}$`)
 var draftRevision = regexp.MustCompile(`^[a-f0-9]{64}$`)
 
 func (a *app) draftDirectory(jade, file string) (string, error) {
-	directory, err := workspaceDirectory(a.root, jade)
-	if err != nil {
-		return "", err
-	}
-	if file == "" {
-		return "", errors.New("file is required")
-	}
-	path, err := safeJoin(directory, file)
+	path, err := workspaceFilePath(a.root, jade, file)
 	if err != nil {
 		return "", err
 	}

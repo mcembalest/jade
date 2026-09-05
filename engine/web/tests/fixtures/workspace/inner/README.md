@@ -1,1 +1,3 @@
-jade.md
+# Inner workspace
+
+Nested project notes.

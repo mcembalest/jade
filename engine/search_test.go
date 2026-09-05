@@ -64,7 +64,7 @@ func TestSearchTextScopeAndBounds(t *testing.T) {
 
 func TestOrdinaryMarkdownPreviewWithoutMarker(t *testing.T) {
 	a := testApp(t)
-	if err := os.Remove(filepath.Join(a.root, markerName)); err != nil {
+	if err := os.Remove(filepath.Join(a.root, homepageName)); err != nil {
 		t.Fatal(err)
 	}
 	writeTestFile(t, filepath.Join(a.root, "draft.MD"), "# My draft\n")

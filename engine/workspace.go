@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	markerName       = "jade.md"
+	homepageName     = "README.md"
 	maximumTextBytes = 5_000_000
 )
 
@@ -27,14 +27,13 @@ var ignoredDirectories = map[string]bool{
 }
 
 type Workspace struct {
-	Title     string
-	Path      string
-	Markdown  string
-	Files     []string
-	HasMarker bool
+	Title    string
+	Path     string
+	Files    []string
+	Homepage string
 }
 
-func jadeTitle(markdown string) string {
+func homepageTitle(markdown string) string {
 	inFence := false
 	for _, line := range strings.Split(markdown, "\n") {
 		trimmed := strings.TrimLeft(strings.TrimSuffix(line, "\r"), " \t")
@@ -79,7 +78,7 @@ func safeJoin(root, path string) (string, error) {
 }
 
 // ResolveWorkspaceRoot resolves a folder or a file's containing folder.
-// A workspace is any directory; jade.md enriches one but never gates opening it.
+// A workspace is any directory; README.md enriches one but never gates opening it.
 func ResolveWorkspaceRoot(start string) (string, error) {
 	absolute, err := filepath.Abs(start)
 	if err != nil {
@@ -120,12 +119,7 @@ func workspaceDirectory(runtimeRoot, workspacePath string) (string, error) {
 	if err != nil || !info.IsDir() {
 		return "", fmt.Errorf("%s is not a workspace directory", workspacePath)
 	}
-	if actual != root {
-		marker, markerErr := os.Stat(filepath.Join(actual, markerName))
-		if markerErr != nil || !marker.Mode().IsRegular() {
-			return "", fmt.Errorf("%s is not an inner JaDE", workspacePath)
-		}
-	}
+
 	return actual, nil
 }
 
@@ -207,14 +201,14 @@ func loadWorkspace(runtimeRoot, jadePath string, scan bool) (Workspace, error) {
 	if err != nil {
 		return Workspace{}, err
 	}
-	marker, markerErr := os.ReadFile(filepath.Join(currentRoot, markerName))
-	hasMarker := markerErr == nil
-	if markerErr != nil && !errors.Is(markerErr, os.ErrNotExist) {
-		return Workspace{}, markerErr
-	}
+	homepage := findHomepage(currentRoot)
 	title := filepath.Base(currentRoot)
-	if hasMarker {
-		title = jadeTitle(string(marker))
+	if homepage != "" {
+		contents, readErr := os.ReadFile(filepath.Join(currentRoot, homepage))
+		if readErr != nil {
+			return Workspace{}, readErr
+		}
+		title = homepageTitle(string(contents))
 	}
 	var files []string
 	if scan {
@@ -224,29 +218,28 @@ func loadWorkspace(runtimeRoot, jadePath string, scan bool) (Workspace, error) {
 		}
 	}
 	sort.Slice(files, func(i, j int) bool {
-		if files[i] == markerName {
+		if files[i] == homepage {
 			return true
 		}
-		if files[j] == markerName {
+		if files[j] == homepage {
 			return false
 		}
 		return files[i] < files[j]
 	})
 	return Workspace{
-		Title:     title,
-		Path:      relativeSlash(root, currentRoot),
-		Markdown:  string(marker),
-		Files:     files,
-		HasMarker: hasMarker,
+		Title:    title,
+		Path:     relativeSlash(root, currentRoot),
+		Files:    files,
+		Homepage: homepage,
 	}, nil
 }
 
 func existingFile(runtimeRoot, jadePath, filePath string) (string, error) {
-	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
+	runtimeRoot, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
 		return "", err
 	}
-	candidate, err := safeJoin(currentRoot, filePath)
+	candidate, err := workspaceFilePath(runtimeRoot, jadePath, filePath)
 	if err != nil {
 		return "", err
 	}
@@ -254,7 +247,7 @@ func existingFile(runtimeRoot, jadePath, filePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if !within(currentRoot, actual) {
+	if !within(runtimeRoot, actual) {
 		return "", errors.New("file leaves its JaDE")
 	}
 	return actual, nil
@@ -277,14 +270,14 @@ func ReadWorkspaceFile(runtimeRoot, jadePath, filePath string) (string, error) {
 }
 
 func CreateWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error {
-	if len([]byte(contents)) > maximumTextBytes {
-		return errors.New("file is too large")
-	}
-	currentRoot, err := workspaceDirectory(runtimeRoot, jadePath)
+	runtimeRoot, err := filepath.EvalSymlinks(runtimeRoot)
 	if err != nil {
 		return err
 	}
-	candidate, err := safeJoin(currentRoot, filePath)
+	if len([]byte(contents)) > maximumTextBytes {
+		return errors.New("file is too large")
+	}
+	candidate, err := workspaceFilePath(runtimeRoot, jadePath, filePath)
 	if err != nil {
 		return err
 	}
@@ -302,7 +295,7 @@ func CreateWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error
 		ancestor = parent
 	}
 	actualAncestor, err := filepath.EvalSymlinks(ancestor)
-	if err != nil || !within(currentRoot, actualAncestor) {
+	if err != nil || !within(runtimeRoot, actualAncestor) {
 		return errors.New("file leaves its JaDE")
 	}
 	if info, lstatErr := os.Lstat(candidate); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
@@ -321,4 +314,38 @@ func CreateWorkspaceFile(runtimeRoot, jadePath, filePath, contents string) error
 		return writeErr
 	}
 	return closeErr
+}
+
+// Homepages are ordinary editable Markdown, recognized regardless of case.
+func findHomepage(directory string) string {
+	entries, _ := os.ReadDir(directory)
+	for _, entry := range entries {
+		if strings.EqualFold(entry.Name(), homepageName) {
+			info, err := entry.Info()
+			if err == nil && entry.Type()&os.ModeSymlink == 0 && editableText(filepath.Join(directory, entry.Name()), info) {
+				return entry.Name()
+			}
+		}
+	}
+	return ""
+}
+
+// A nested workspace changes the view, not access to parent or sibling files.
+func workspaceFilePath(root, workspace, file string) (string, error) {
+	root, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return "", err
+	}
+	directory, err := workspaceDirectory(root, workspace)
+	if err != nil {
+		return "", err
+	}
+	if file == "" || strings.ContainsRune(file, 0) || filepath.IsAbs(filepath.FromSlash(file)) {
+		return "", errors.New("file must be a relative path")
+	}
+	candidate := filepath.Join(directory, filepath.FromSlash(file))
+	if !within(root, candidate) {
+		return "", errors.New("file leaves the launched folder")
+	}
+	return candidate, nil
 }

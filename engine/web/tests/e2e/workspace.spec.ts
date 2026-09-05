@@ -16,7 +16,7 @@ test('autosave reaches disk and survives reload', async ({ page, workspace }) =>
 test('immediate subproject navigation saves first', async ({ page, workspace }) => {
   await editor(page).fill('Before switching\n');
   await revealFiles(page);
-  await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
+  await page.locator('a[href="/?jade=inner&file=README.md"]').click();
   await expect(page).toHaveURL(/jade=inner/);
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('Before switching\n');
   await page.getByRole('link', { name: 'JADE', exact: true }).click();
@@ -41,7 +41,7 @@ test('failed save blocks navigation and can be retried', async ({ page, workspac
   await page.route('**/save', route => route.fulfill({ status: 503, body: 'Temporary write failure' }));
   await editor(page).fill('Keep this edit\n');
   await revealFiles(page);
-  await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
+  await page.locator('a[href="/?jade=inner&file=README.md"]').click();
   await expect(page.locator('#save-status')).toContainText('Not saved');
   await fileIs(page, 'notes.txt');
   expect(await documentText(page)).toBe('Keep this edit\n');
@@ -124,7 +124,7 @@ test('edits during a save are included before navigation completes', async ({ pa
   await editor(page).fill('Newer snapshot\n');
   release();
   await revealFiles(page);
-  await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
+  await page.locator('a[href="/?jade=inner&file=README.md"]').click();
   await expect(page).toHaveURL(/jade=inner/);
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('Newer snapshot\n');
   await saved(page);
@@ -165,11 +165,11 @@ test('error controls fit the minimum supported window width', async ({ page }) =
 
 test('local SVG plots render inside the sandboxed Markdown preview', async ({ page, appURL, workspace }) => {
   await writeFile(join(workspace, 'plot.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#50dfbd"/></svg>');
-  await writeFile(join(workspace, 'jade.md'), '# Plot workspace\n\n![Measured plot](plot.svg)\n');
+  await writeFile(join(workspace, 'README.md'), '# Plot workspace\n\n![Measured plot](plot.svg)\n');
   await page.goto(appURL);
   await revealPreview(page);
   const plot = page.frameLocator('#view-frame').getByRole('img', { name: 'Measured plot' });
   await expect(plot).toBeVisible();
   await expect.poll(() => plot.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(200);
-  await expect(page.locator('#view-frame')).toHaveAttribute('sandbox', 'allow-top-navigation-by-user-activation');
+  await expect(page.locator('#view-frame')).toHaveAttribute('sandbox', 'allow-same-origin allow-scripts');
 });

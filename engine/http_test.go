@@ -14,9 +14,9 @@ import (
 func testApp(t *testing.T) *app {
 	t.Helper()
 	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, markerName), "# Guarded\n\nResult: [out.txt](out.txt)\n")
+	writeTestFile(t, filepath.Join(root, homepageName), "# Guarded\n\nResult: [out.txt](out.txt)\n")
 	writeTestFile(t, filepath.Join(root, "notes.go"), "package notes\n")
-	writeTestFile(t, filepath.Join(root, "inner", markerName), "# Inner\n")
+	writeTestFile(t, filepath.Join(root, "inner", homepageName), "# Inner\n")
 	writeTestFile(t, filepath.Join(root, "inner", "code.py"), "print('inner')\n")
 	application, err := newApp(root, 7333)
 	if err != nil {
@@ -39,7 +39,7 @@ func postForm(handler http.Handler, target, host, origin string, form url.Values
 
 func TestGuardRejectsCrossOriginAndRebinding(t *testing.T) {
 	handler := testApp(t).handler()
-	form := url.Values{"jade": {"."}, "file": {markerName}, "content": {"# Changed\n"}}
+	form := url.Values{"jade": {"."}, "file": {homepageName}, "content": {"# Changed\n"}}
 
 	if code := postForm(handler, "/save", "127.0.0.1:7333", "https://evil.example", form).Code; code != http.StatusForbidden {
 		t.Fatalf("cross-origin POST = %d, want 403", code)
@@ -91,28 +91,27 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 	var file struct {
 		Selected string `json:"selected"`
 		Contents string `json:"contents"`
-		IsJade   bool   `json:"isJade"`
 		ViewURL  string `json:"viewURL"`
 	}
 	if err := json.NewDecoder(recorder.Body).Decode(&file); err != nil {
 		t.Fatal(err)
 	}
-	if recorder.Code != http.StatusOK || file.Selected != "notes.go" || file.Contents != "package notes\n" || file.IsJade || file.ViewURL != "" {
+	if recorder.Code != http.StatusOK || file.Selected != "notes.go" || file.Contents != "package notes\n" || file.ViewURL != "" {
 		t.Fatalf("ordinary file response = %#v", file)
 	}
 
 	writeTestFile(t, filepath.Join(application.root, "out.txt"), "ready")
-	request = httptest.NewRequest(http.MethodGet, "/file?jade=.&file=jade.md", nil)
+	request = httptest.NewRequest(http.MethodGet, "/file?jade=.&file=README.md", nil)
 	request.Host = "127.0.0.1:7333"
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 	if err := json.NewDecoder(recorder.Body).Decode(&file); err != nil {
 		t.Fatal(err)
 	}
-	if !file.IsJade || file.ViewURL != "/front?jade=." {
-		t.Fatalf("jade.md response = %#v", file)
+	if file.ViewURL != "/view?jade=.&file=README.md" {
+		t.Fatalf("README.md response = %#v", file)
 	}
-	request = httptest.NewRequest(http.MethodGet, "/file?jade=.&file=jade.md&view=out.txt", nil)
+	request = httptest.NewRequest(http.MethodGet, "/file?jade=.&file=README.md&view=out.txt", nil)
 	request.Host = "127.0.0.1:7333"
 	recorder = httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -125,7 +124,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 
 }
 
-func TestPlainRepositoryOpensWithoutJadeMarker(t *testing.T) {
+func TestPlainRepositoryOpensWithoutHomepage(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "main.go"), "package main\n")
 	application, err := newApp(root, 7333)
@@ -139,6 +138,32 @@ func TestPlainRepositoryOpensWithoutJadeMarker(t *testing.T) {
 	page := recorder.Body.String()
 	if recorder.Code != http.StatusOK || !strings.Contains(page, `data-file="main.go"`) || !strings.Contains(page, "package main") {
 		t.Fatalf("plain repository = %d:\n%s", recorder.Code, page)
+	}
+}
+
+func TestPreviewsResolveFoldersSharedFilesAndFragments(t *testing.T) {
+	a := testApp(t)
+	writeTestFile(t, filepath.Join(a.root, "study", "readme.md"), "# Study\n\n[Shared](../notes.go)\n\n[Report](report/)\n")
+	writeTestFile(t, filepath.Join(a.root, "study", "report", "notes.md"), "# Methods\n\n[Home](../../README.md#guarded)\n")
+	for _, tc := range []struct {
+		file, contains string
+		status         int
+	}{
+		{"study", `<h1 id="study">Study</h1>`, 200},
+		{"study/readme.md", `/view?file=notes.go&amp;jade=.`, 200},
+		{"study/report", `notes.md</a>`, 200},
+		{"study/report/notes.md", `/view?file=README.md&amp;jade=.#guarded`, 200},
+		{"study/../notes.go", `<pre><code>package notes`, 200},
+		{"missing.md", `This file is unavailable.`, 404},
+		{"../outside.md", `This file is unavailable.`, 404},
+	} {
+		t.Run(tc.file, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			a.view(response, httptest.NewRequest("GET", "/view?file="+url.QueryEscape(tc.file), nil))
+			if response.Code != tc.status || !strings.Contains(response.Body.String(), tc.contains) {
+				t.Fatalf("preview = %d: %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -218,8 +243,8 @@ func TestReportLinksResolveBesideReport(t *testing.T) {
 		image                   bool
 	}{
 		{"local image", "latency.svg", "data:image/svg+xml;base64,", true},
-		{"sibling report", "next.md", "/?jade=.&file=reports%2Fresult.md&view=reports%2Fnext.md", false},
-		{"parent file", "../notes.go", "/?jade=.&file=reports%2Fresult.md&view=notes.go", false},
+		{"sibling report", "next.md", "/view?file=reports%2Fnext.md&jade=.", false},
+		{"parent file", "../notes.go", "/view?file=notes.go&jade=.", false},
 		{"outside workspace", "../../outside.svg", "../../outside.svg", true},
 		{"external link", "https://example.com/paper", "https://example.com/paper", false},
 	} {

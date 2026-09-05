@@ -26,11 +26,7 @@ func updateWorkspaceFile(root, jade, file, contents, revision string) error {
 		return err
 	}
 	// Keep the same symlink policy as file creation.
-	directory, err := workspaceDirectory(root, jade)
-	if err != nil {
-		return err
-	}
-	candidate, err := safeJoin(directory, file)
+	candidate, err := workspaceFilePath(root, jade, file)
 	if err != nil {
 		return err
 	}

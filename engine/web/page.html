@@ -36,9 +36,10 @@
           <div id="empty-editor" {{if .Selected}}hidden{{end}}>Choose a file from Files, or create a new one.</div>
           <div id="editor"></div>
         </form>
-        <section id="resolved" role="dialog" aria-label="Markdown preview" hidden>
-          <div class="filebar preview-heading"><button id="preview-handle" type="button" aria-label="Move preview" title="Drag or use arrow keys to move"><span id="view-name" title="{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}">Preview{{if .View}} · {{.View}}{{else}} · {{.Selected}}{{end}}</span></button><button id="preview-keep" type="button">Keep open</button><button id="preview-close" type="button" aria-label="Close preview">×</button></div>
-          <iframe id="view-frame" sandbox="allow-top-navigation-by-user-activation" src="{{.ViewURL}}" title="Resolved JaDE view"></iframe>
+        <section id="resolved" class="preview" role="dialog" aria-label="Preview" hidden>
+          <div class="filebar preview-heading"><button class="preview-back" type="button" aria-label="Back to parent preview" hidden>‹</button><button id="preview-handle" class="preview-handle" type="button" aria-label="Move preview" title="Drag or use arrow keys to move"><span id="view-name" class="preview-title" title="{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}">Preview{{if .View}} · {{.View}}{{else}} · {{.Selected}}{{end}}</span></button><button id="preview-keep" class="preview-keep" type="button">Keep open</button><button class="preview-edit" type="button" hidden>Edit</button><button id="preview-close" class="preview-close" type="button" aria-label="Close preview">×</button></div>
+          <p class="preview-status" role="status" hidden></p>
+          <iframe id="view-frame" sandbox="allow-same-origin allow-scripts" src="{{.ViewURL}}" title="Resolved JaDE view"></iframe>
         </section>
       </div>
     </main>

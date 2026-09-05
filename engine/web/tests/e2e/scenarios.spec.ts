@@ -21,7 +21,7 @@ test('writing: draft Markdown, revise a phrase, preview, and reopen', async ({pa
   await page.getByRole('textbox',{name:'Find',exact:true}).press('Escape');
   await editor(page).press('ControlOrMeta+s'); await saved(page);
   const expected = draft.replace('second check','fresh run');
-  expect(await readFile(join(workspace,'jade.md'),'utf8')).toBe(expected);
+  expect(await readFile(join(workspace,'README.md'),'utf8')).toBe(expected);
   await revealPreview(page);
   const preview = page.frameLocator('#view-frame');
   await expect(preview.getByRole('heading',{name:'Experiment notes'})).toBeVisible();
@@ -66,7 +66,7 @@ test('notes: create a meeting note, continue a list, switch workspace, return', 
   const note = '# Meeting\n\n- Check latency\n- Repeat on GPU';
   expect(await documentText(page)).toBe(note);
   await revealFiles(page);
-  await page.locator('a[data-jade="inner"][data-file="inner/jade.md"]').click();
+  await page.locator('a[data-jade="inner"][data-file="inner/README.md"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-jade','inner');
   expect(await readFile(join(workspace,'meetings/2026-09-04.md'),'utf8')).toBe(note);
   await page.getByRole('link',{name:'JADE',exact:true}).click();

@@ -13,7 +13,7 @@ import { initPreview } from './preview.js';
 
 interface Draft { id: string; token: string; content: string; revision: string; updated: string }
 interface DraftOwner { id: string; queue: Promise<void>; version: number; draft: Draft | null }
-interface FileData { selected: string; contents: string; revision: string; isJade: boolean; markdown: boolean; view: string; viewURL: string; title: string }
+interface FileData { selected: string; contents: string; revision: string; markdown: boolean; view: string; viewURL: string; title: string }
 interface ActiveFile { file: string; revision: string; saved: string }
 class HTTPError extends Error {
   constructor(message: string, readonly code: number) { super(message); }
@@ -29,7 +29,7 @@ const status = document.querySelector<HTMLElement>('#save-status')!;
 const reloadButton = document.querySelector<HTMLButtonElement>('#reload-file')!;
 const copyButton = document.querySelector<HTMLButtonElement>('#save-copy')!;
 const saveButton = document.querySelector<HTMLButtonElement>('#save-now')!;
-const updatePreview = initPreview();
+const updatePreview = initPreview(editPreviewFile);
 let filesPinned = false;
 try { filesPinned = document.cookie.split('; ').includes('jade-files-pinned=true'); } catch (_) {}
 const pinFiles = document.querySelector<HTMLButtonElement>('#pin-files')!;
@@ -413,6 +413,25 @@ newFileForm.addEventListener('submit', async event => {
     if (newFileError.textContent) newFilePath.focus();
   }
 });
+
+async function editPreviewFile(rootFile: string) {
+  const folder = body.dataset.jade === '.' ? [] : body.dataset.jade!.split('/');
+  const path = rootFile.split('/');
+  while (folder.length && path.length && folder[0]===path[0]) { folder.shift(); path.shift(); }
+  const file = [...folder.map(()=>'..'), ...path].join('/');
+  let opened = false;
+  await leave(async () => {
+    if (file !== active.file) {
+      const url = fileURL(file); url.searchParams.delete('view');
+      const data: FileData = await (await request(url)).json();
+      const href = new URL(url); href.pathname = '/';
+      await showFile(data, href.href);
+    }
+    editor.focus(); opened = true;
+  });
+  return opened;
+}
+
 initSearch(async (file, line) => {
   await leave(async () => {
     if (file !== active.file || new URL(activeURL).searchParams.has('view')) {

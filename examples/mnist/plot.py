@@ -134,14 +134,14 @@ def tables(runs):
         lines.append(
             "| " + label + " | " + " | ".join(f"{v:,.2f}" for v in values) + " |"
         )
-    write("jade.md", lines)
+    write("README.md", lines)
     lines = ["| Graph | CPU · s | Metal · s |", "| --- | ---: | ---: |"]
     for key in runs["max-cpu"]["compile_seconds"]:
         size, training = key.split(":")
         label = ("Train " if training == "True" else "Infer ") + f"{int(size):,}"
         values = [runs[f"max-{d}"]["compile_seconds"][key] for d in ["cpu", "gpu"]]
         lines.append(f"| {label} | {values[0]:.3f} | {values[1]:.3f} |")
-    write("mojo-max/jade.md", lines)
+    write("mojo-max/README.md", lines)
 
 
 def clean(ax):

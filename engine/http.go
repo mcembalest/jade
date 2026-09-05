@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"html/template"
 	"io"
 	"log"
 	"mime"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -21,6 +23,7 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	gmtext "github.com/yuin/goldmark/text"
 )
 
@@ -41,7 +44,6 @@ type pageData struct {
 	Revision  string
 	CRLF      bool
 	Files     []*fileNode
-	IsJade    bool
 	Markdown  bool
 	View      string
 	ViewURL   string
@@ -89,7 +91,7 @@ func newApp(root string, port int) (*app, error) {
 	for _, host := range []string{"127.0.0.1", "localhost", "::1"} {
 		hosts[net.JoinHostPort(host, strconv.Itoa(port))] = true
 	}
-	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Typographer))
+	markdown := goldmark.New(goldmark.WithExtensions(extension.GFM, extension.Typographer), goldmark.WithParserOptions(parser.WithAutoHeadingID()))
 	return &app{root: realRoot, markdown: markdown, page: page, hosts: hosts}, nil
 }
 
@@ -103,8 +105,7 @@ func (a *app) guard(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(response, "cross-origin request rejected", http.StatusForbidden)
 			return
 		}
-		// A link clicked in an opaque preview navigates the top-level document
-		// as cross-site. Only the read-only shell accepts that navigation;
+		// A browser link can navigate to the read-only shell from another site;
 		// API requests and embedded documents still require the same origin.
 		shellNavigation := request.Method == http.MethodGet && request.URL.Path == "/" &&
 			request.Header.Get("Sec-Fetch-Mode") == "navigate" && request.Header.Get("Sec-Fetch-Dest") == "document"
@@ -124,7 +125,6 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/save", a.guard(a.save))
 	mux.HandleFunc("/drafts", a.guard(a.drafts))
 	mux.HandleFunc("/new", a.guard(a.create))
-	mux.HandleFunc("/front", a.guard(a.front))
 	mux.HandleFunc("/view", a.guard(a.view))
 	mux.HandleFunc("/terminals", a.guard(a.terminals))
 	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
@@ -182,7 +182,7 @@ func buildFileTree(workspace Workspace) []*fileNode {
 			}
 			parentPath = path
 		}
-		jadePath, isJade := workspace.Path, parts[len(parts)-1] == markerName
+		jadePath, isJade := workspace.Path, strings.EqualFold(parts[len(parts)-1], homepageName)
 		if isJade && parentPath != "" {
 			jadePath = filepath.ToSlash(filepath.Clean(filepath.Join(workspace.Path, filepath.FromSlash(parentPath))))
 			if workspace.Path == "." {
@@ -212,16 +212,33 @@ func buildFileTree(workspace Workspace) []*fileNode {
 	return root.Children
 }
 
-func externalDestination(destination string) bool {
-	return destination == "" || strings.Contains(destination, "://") || strings.HasPrefix(destination, "#") || strings.HasPrefix(destination, "/") || strings.HasPrefix(destination, "mailto:") || strings.HasPrefix(destination, "data:")
+func imageData(path string, info os.FileInfo) string {
+	kind := mime.TypeByExtension(strings.ToLower(filepath.Ext(path)))
+	if info == nil || !info.Mode().IsRegular() || info.Size() > maximumTextBytes || !strings.HasPrefix(kind, "image/") {
+		return ""
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	contents, err := io.ReadAll(io.LimitReader(file, maximumTextBytes+1))
+	if err != nil || len(contents) > maximumTextBytes {
+		return ""
+	}
+	return "data:" + kind + ";base64," + base64.StdEncoding.EncodeToString(contents)
 }
 
 func (a *app) rewriteDestination(jadePath, sourceFile string, destination []byte, isImage bool) []byte {
-	dest := string(destination)
-	if externalDestination(dest) {
+	dest, err := url.Parse(string(destination))
+	if err != nil || dest.IsAbs() || dest.Host != "" || dest.Path == "" {
 		return destination
 	}
-	clean := filepath.ToSlash(filepath.Join(filepath.Dir(filepath.FromSlash(sourceFile)), filepath.FromSlash(dest)))
+	clean := filepath.ToSlash(filepath.Join(filepath.Dir(filepath.FromSlash(sourceFile)), filepath.FromSlash(dest.Path)))
+	if strings.HasPrefix(dest.Path, "/") {
+		jadePath = "."
+		clean = strings.TrimPrefix(dest.Path, "/")
+	}
 	resolved, err := existingFile(a.root, jadePath, clean)
 	if err != nil {
 		return destination
@@ -230,33 +247,19 @@ func (a *app) rewriteDestination(jadePath, sourceFile string, destination []byte
 	if err != nil {
 		return destination
 	}
-	query := template.URLQueryEscaper
 	if info.IsDir() {
-		if marker, markerErr := os.Stat(filepath.Join(resolved, markerName)); markerErr == nil && marker.Mode().IsRegular() {
-			return []byte("/?jade=" + query(relativeSlash(a.root, resolved)))
+		if homepage := findHomepage(resolved); homepage != "" {
+			resolved = filepath.Join(resolved, homepage)
+		}
+	}
+	if isImage {
+		if data := imageData(resolved, info); data != "" {
+			return []byte(data)
 		}
 		return destination
 	}
-	rel := filepath.ToSlash(filepath.Clean(clean))
-	if isImage {
-		// Sandboxed previews have an opaque origin. Embed bounded local images so
-		// browsers can display them without weakening our cross-site request guard.
-		kind := mime.TypeByExtension(filepath.Ext(resolved))
-		if !strings.HasPrefix(kind, "image/") || !info.Mode().IsRegular() || info.Size() > maximumTextBytes {
-			return destination
-		}
-		file, err := os.Open(resolved)
-		if err != nil {
-			return destination
-		}
-		defer file.Close()
-		contents, err := io.ReadAll(io.LimitReader(file, maximumTextBytes+1))
-		if err != nil || len(contents) > maximumTextBytes {
-			return destination
-		}
-		return []byte("data:" + kind + ";base64," + base64.StdEncoding.EncodeToString(contents))
-	}
-	return []byte("/?jade=" + query(jadePath) + "&file=" + query(sourceFile) + "&view=" + query(rel))
+	target := &url.URL{Path: "/view", RawQuery: url.Values{"jade": {"."}, "file": {relativeSlash(a.root, resolved)}}.Encode(), Fragment: dest.Fragment}
+	return []byte(target.String())
 }
 
 func (a *app) rewriteDestinations(jadePath, sourceFile string, document ast.Node) {
@@ -267,12 +270,15 @@ func (a *app) rewriteDestinations(jadePath, sourceFile string, document ast.Node
 		switch typed := node.(type) {
 		case *ast.Link:
 			if !bytes.HasPrefix(typed.Destination, []byte("#")) {
-				typed.SetAttributeString("target", []byte("_top"))
+				typed.SetAttributeString("target", []byte("_blank"))
+				typed.SetAttributeString("rel", []byte("noopener"))
 			}
 			typed.Destination = a.rewriteDestination(jadePath, sourceFile, typed.Destination, false)
 		case *ast.AutoLink:
-			typed.SetAttributeString("target", []byte("_top"))
+			typed.SetAttributeString("target", []byte("_blank"))
+			typed.SetAttributeString("rel", []byte("noopener"))
 		case *ast.Image:
+			typed.SetAttributeString("data-preview-url", a.rewriteDestination(jadePath, sourceFile, typed.Destination, false))
 			typed.Destination = a.rewriteDestination(jadePath, sourceFile, typed.Destination, true)
 		}
 		return ast.WalkContinue, nil
@@ -285,8 +291,8 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 		return pageData{}, err
 	}
 	if selected == "" {
-		if workspace.HasMarker {
-			selected = markerName
+		if workspace.Homepage != "" {
+			selected = workspace.Homepage
 		} else if len(workspace.Files) > 0 {
 			selected = workspace.Files[0]
 		}
@@ -314,7 +320,7 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 			}
 		}
 	}
-	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Revision: fileRevision(contents), CRLF: strings.Contains(contents, "\r\n"), Files: buildFileTree(workspace), IsJade: selected == markerName}
+	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Revision: fileRevision(contents), CRLF: strings.Contains(contents, "\r\n"), Files: buildFileTree(workspace)}
 	data.Markdown = strings.EqualFold(filepath.Ext(selected), ".md")
 	if !data.Markdown {
 		return data, nil
@@ -325,14 +331,10 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 		}
 	}
 	data.View = view
-	if view == "" && data.IsJade {
-		data.ViewURL = "/front?jade=" + template.URLQueryEscaper(workspace.Path)
-	} else {
-		if view == "" {
-			view = selected
-		}
-		data.ViewURL = "/view?jade=" + template.URLQueryEscaper(workspace.Path) + "&file=" + template.URLQueryEscaper(view)
+	if view == "" {
+		view = selected
 	}
+	data.ViewURL = "/view?jade=" + template.URLQueryEscaper(workspace.Path) + "&file=" + template.URLQueryEscaper(view)
 	return data, nil
 }
 
@@ -369,7 +371,7 @@ func (a *app) file(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "revision": data.Revision, "isJade": data.IsJade, "markdown": data.Markdown, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
+	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "revision": data.Revision, "markdown": data.Markdown, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
 }
 
 func parseForm(response http.ResponseWriter, request *http.Request) bool {
@@ -418,21 +420,17 @@ func (a *app) create(response http.ResponseWriter, request *http.Request) {
 		return
 	}
 	jadePath, filePath := request.FormValue("jade"), strings.TrimSpace(request.FormValue("path"))
-	currentRoot, err := workspaceDirectory(a.root, jadePath)
+	candidate, err := workspaceFilePath(a.root, jadePath, filePath)
 	if err == nil {
-		var candidate string
-		candidate, err = safeJoin(currentRoot, filePath)
-		if err == nil {
-			if _, statErr := os.Stat(candidate); statErr == nil {
-				err = errors.New("file already exists")
-			} else if !errors.Is(statErr, os.ErrNotExist) {
-				err = statErr
-			}
+		if _, statErr := os.Stat(candidate); statErr == nil {
+			err = errors.New("file already exists")
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			err = statErr
 		}
 	}
 	if err == nil {
 		contents := ""
-		if filepath.Base(filePath) == markerName {
+		if strings.EqualFold(filepath.Base(filePath), homepageName) {
 			contents = "# Untitled JaDE\n"
 		}
 		err = CreateWorkspaceFile(a.root, jadePath, filePath, contents)
@@ -453,48 +451,84 @@ func (a *app) renderMarkdown(response http.ResponseWriter, jadePath, sourceFile 
 		http.Error(response, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.Header().Set("Cache-Control", "no-store")
-	response.Header().Set("Content-Security-Policy", "sandbox allow-top-navigation-by-user-activation; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><style>`+previewStyle+`</style>`)
-	_, _ = response.Write(rendered.Bytes())
+	a.previewDocument(response, jadePath, sourceFile, true, rendered.String())
 }
 
-func (a *app) front(response http.ResponseWriter, request *http.Request) {
-	workspace, err := LoadWorkspace(a.root, queryPath(request, "jade", "."))
-	if err != nil {
-		http.Error(response, err.Error(), http.StatusBadRequest)
-		return
-	}
-	a.renderMarkdown(response, workspace.Path, markerName, []byte(workspace.Markdown))
+// Preview documents permit parent-side navigation handlers, but never document scripts.
+func (a *app) previewDocument(response http.ResponseWriter, jade, file string, editable bool, html string) {
+	path, _ := existingFile(a.root, jade, file)
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	response.Header().Set("Cache-Control", "no-store")
+	response.Header().Set("Content-Security-Policy", "sandbox allow-same-origin allow-scripts; default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-src 'self'; base-uri 'none'; form-action 'none'")
+	_, _ = fmt.Fprintf(response, `<!doctype html><meta charset="utf-8"><style>%s</style><body data-file="%s" data-editable="%t">%s</body>`, previewStyle, template.HTMLEscapeString(relativeSlash(a.root, path)), editable, html)
 }
 
 func (a *app) view(response http.ResponseWriter, request *http.Request) {
-	jadePath, filePath := queryPath(request, "jade", "."), request.URL.Query().Get("file")
-	if filePath == "" {
-		http.Error(response, "file is required", http.StatusBadRequest)
-		return
-	}
-	path, err := existingFile(a.root, jadePath, filePath)
+	jade, file := queryPath(request, "jade", "."), request.URL.Query().Get("file")
+	path, err := existingFile(a.root, jade, file)
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusNotFound)
+		http.Error(response, "This file is unavailable.", http.StatusNotFound)
 		return
 	}
-	response.Header().Set("Cache-Control", "no-store")
-	if strings.EqualFold(filepath.Ext(path), ".md") {
-		contents, readErr := os.ReadFile(path)
-		if readErr != nil {
-			http.Error(response, readErr.Error(), http.StatusInternalServerError)
+	info, err := os.Stat(path)
+	if err != nil {
+		http.Error(response, "This file is unavailable.", http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		if homepage := findHomepage(path); homepage != "" {
+			file = filepath.ToSlash(filepath.Join(file, homepage))
+			path = filepath.Join(path, homepage)
+			info, _ = os.Stat(path)
+		} else {
+			entries, err := os.ReadDir(path)
+			if err != nil {
+				http.Error(response, "Cannot read this folder.", 500)
+				return
+			}
+			html := "<h1>" + template.HTMLEscapeString(filepath.Base(path)) + "</h1><ul>"
+			for _, entry := range entries {
+				if entry.Name() == ".git" || ignoredDirectories[entry.Name()] || entry.Type()&os.ModeSymlink != 0 {
+					continue
+				}
+				href := a.rewriteDestination(jade, filepath.ToSlash(filepath.Join(file, "index.md")), []byte(url.PathEscape(entry.Name())), false)
+				html += `<li><a href="` + template.HTMLEscapeString(string(href)) + `">` + template.HTMLEscapeString(entry.Name()) + `</a></li>`
+			}
+			a.previewDocument(response, jade, file, false, html+"</ul>")
 			return
 		}
-		a.renderMarkdown(response, jadePath, filePath, contents)
+	}
+	if request.URL.Query().Get("raw") == "1" && strings.EqualFold(filepath.Ext(path), ".pdf") {
+		response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
+		http.ServeFile(response, request, path)
 		return
 	}
-	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	if kind := mime.TypeByExtension(filepath.Ext(path)); kind != "" {
-		response.Header().Set("Content-Type", kind)
+	if strings.EqualFold(filepath.Ext(path), ".pdf") {
+		raw := *request.URL
+		query := raw.Query()
+		query.Set("raw", "1")
+		raw.RawQuery = query.Encode()
+		a.previewDocument(response, jade, file, false, `<iframe class="pdf" title="PDF" src="`+template.HTMLEscapeString(raw.String())+`"></iframe>`)
+		return
 	}
-	http.ServeFile(response, request, path)
+	if info != nil && editableText(path, info) && !strings.HasSuffix(strings.ToLower(path), ".svg") {
+		contents, err := ReadWorkspaceFile(a.root, jade, file)
+		if err != nil {
+			http.Error(response, "Cannot read this file.", 500)
+			return
+		}
+		if strings.EqualFold(filepath.Ext(path), ".md") {
+			a.renderMarkdown(response, jade, file, []byte(contents))
+		} else {
+			a.previewDocument(response, jade, file, true, "<pre><code>"+template.HTMLEscapeString(contents)+"</code></pre>")
+		}
+		return
+	}
+	if data := imageData(path, info); data != "" {
+		a.previewDocument(response, jade, file, false, `<img alt="`+template.HTMLEscapeString(filepath.Base(path))+`" src="`+data+`">`)
+		return
+	}
+	a.previewDocument(response, jade, file, false, "<p>No preview is available for this file type.</p>")
 }
 
 // NewHandler returns the HTTP interface for the JaDE rooted at root.

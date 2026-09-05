@@ -123,7 +123,7 @@ test('Markdown hover previews dismiss, stay open, move and leave editor layout u
 test('search result hover previews remain interactive inside the search dialog', async ({page,appURL}) => {
   await page.goto(appURL+'/?file=notes.txt');
   await page.locator('#search-toggle').click();
-  await page.locator('#search-input').fill('jade.md');
+  await page.locator('#search-input').fill('README.md');
   await page.locator('#search-results button').first().hover();
   await expect(page.locator('#preview-keep')).toBeVisible();
   await page.locator('#preview-keep').click();

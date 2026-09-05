@@ -32,7 +32,7 @@ test.beforeEach(async ({ page, workspace }) => {
   await mkdir(join(workspace, 'a-very-long-directory-name-that-needs-an-ellipsis'), {recursive:true});
   await writeFile(join(workspace, 'a-very-long-directory-name-that-needs-an-ellipsis/notes.txt'), 'Nested notes');
   await writeFile(join(workspace, 'plot.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560"><rect width="1000" height="560" fill="#101923"/><path d="M80 60V480H940" fill="none" stroke="#91a6b6" stroke-width="3"/><path d="M80 420L250 260L420 190L600 130L780 110L940 90" fill="none" stroke="#50dfbd" stroke-width="8"/><text x="80" y="40" fill="#eaf3f8" font-family="sans-serif" font-size="24">Training progress</text></svg>');
-  await writeFile(join(workspace, 'jade.md'), '# A workspace with a long but useful descriptive name\n\n' +
+  await writeFile(join(workspace, 'README.md'), '# A workspace with a long but useful descriptive name\n\n' +
     'https://example.com/' + 'long'.repeat(80) + '\n\n' +
     '| Column |' + ' Measurement |'.repeat(8) + '\n| --- |' + ' --- |'.repeat(8) + '\n| Local |' + ' value |'.repeat(8) +
     '\n\n```python\n' + 'print("long code") '.repeat(30) + '\n```\n\n' + '![Learning curve](plot.svg)\n\n' + '## More notes\n\nA useful paragraph.\n\n'.repeat(20));
@@ -124,8 +124,8 @@ test('terminal notices fit, dismiss, and recover after failure', async ({page,ap
 
 test('recovery has a visible Save action and errors leave room for editing', async ({page,appURL},info) => {
   await page.setViewportSize({width:760,height:520});
-  const file = await (await page.request.get(appURL+'/file?jade=.&file=jade.md')).json();
-  const draft = await page.request.post(appURL+'/drafts',{form:{jade:'.',file:'jade.md',id:'11111111-1111-1111-1111-111111111111',revision:file.revision,content:'# Recovered note\n'}});
+  const file = await (await page.request.get(appURL+'/file?jade=.&file=README.md')).json();
+  const draft = await page.request.post(appURL+'/drafts',{form:{jade:'.',file:'README.md',id:'11111111-1111-1111-1111-111111111111',revision:file.revision,content:'# Recovered note\n'}});
   expect(draft.ok()).toBe(true);
   await page.goto(appURL);
   await expect(page.locator('#recover-draft')).toBeVisible();
@@ -149,29 +149,21 @@ test('recovery has a visible Save action and errors leave room for editing', asy
   await page.screenshot({scale:'css',path:info.outputPath('save-error.png')});
 });
 
-test('linked artifacts are explicit and remain selected across refresh', async ({page,appURL,workspace,browserName,expectedPageErrors}) => {
+test('linked artifacts are explicit and remain selected across refresh', async ({page,appURL,workspace}) => {
   await writeFile(join(workspace,'artifact.md'),'# Artifact output\n');
-  await writeFile(join(workspace,'jade.md'),'# Workspace introduction\n\n[Read the artifact](artifact.md)\n');
+  await writeFile(join(workspace,'README.md'),'# Workspace introduction\n\n[Read the artifact](artifact.md)\n');
   await page.goto(appURL);
   await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Workspace introduction',exact:true})).toBeVisible();
-  // WebKit 26.6 emits this native sandbox diagnostic during the click even
-  // though user-activated navigation succeeds. Keep the sandbox and assert
-  // both the exact diagnostic and the resulting navigation, not a blanket filter.
-  if (browserName === 'webkit') expectedPageErrors.push(`${appURL.replace('http:/','')}/' from frame with URL '${appURL}/front?jade=.'. The frame attempting navigation of the top-level window is sandboxed, but the 'allow-top-navigation' flag is not set.\n`);
-  await revealFiles(page);
+  const startingURL=page.url();
   await page.frameLocator('#view-frame').getByRole('link',{name:'Read the artifact'}).click();
-  await revealPreview(page);
-  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Artifact output',exact:true})).toBeVisible();
+  const child=page.locator('.preview').last();
+  await expect(child.locator('iframe').contentFrame().getByRole('heading',{name:'Artifact output',exact:true})).toBeVisible();
+  await expect(page).toHaveURL(startingURL);
+  await child.locator('.preview-close').click();
+  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Workspace introduction',exact:true})).toBeVisible();
   await editor(page).fill('# Workspace updated\n\n[Read the artifact](artifact.md)\n');
-  await editor(page).press('ControlOrMeta+s');
-  await saved(page);
-  await expect(page.locator('.project')).toHaveText('Workspace updated');
-  await revealPreview(page);
-  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Artifact output',exact:true})).toBeVisible();
-  await revealFiles(page);
-  await page.locator('.file-link[data-file="jade.md"][data-jade="."]').click();
-  await revealPreview(page);
+  await editor(page).press('ControlOrMeta+s'); await saved(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Workspace updated',exact:true})).toBeVisible();
 });
 
@@ -221,9 +213,9 @@ test('empty workspace and live resizing keep navigation usable', async ({page,ap
   await page.screenshot({scale:'css',path:info.outputPath('empty-workspace.png')});
   await revealFiles(page);
   await page.locator('#new-file').click();
-  await page.getByRole('textbox',{name:'New file path'}).fill('jade.md');
+  await page.getByRole('textbox',{name:'New file path'}).fill('README.md');
   await page.getByRole('button',{name:'Create file',exact:true}).click();
-  await expect(page.locator('#file-name')).toHaveText('jade.md');
+  await expect(page.locator('#file-name')).toHaveText('README.md');
   await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Untitled JaDE'})).toBeVisible();
   await page.setViewportSize({width:390,height:640});
