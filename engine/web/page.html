@@ -52,15 +52,17 @@
   <div id="companion-dock">
     <section id="companion-card" aria-label="Sanjana’s corner" popover="auto">
       <div class="companion-heading"><div><span class="companion-eyebrow">A LITTLE COMPANY</span><h2>Sanjana’s corner</h2></div><button id="companion-close" type="button" autofocus aria-label="Close Sanjana’s corner">×</button></div>
-      <p class="companion-intro">A small pause. Something lovely. A little company while you make things.</p>
-      <div class="companion-story" aria-live="polite" aria-atomic="true">
-        <span id="companion-category"></span><span class="companion-sample">Sample</span>
-        <h3 id="companion-title"></h3><p id="companion-body"></p>
-        <div class="companion-pagination"><span id="companion-count"></span><button id="companion-next" type="button">Another little thing →</button></div>
-      </div>
-      <p class="companion-note">These are sample cards, not live updates. Her personality is yours to write.</p>
+      <p class="companion-intro">Fashion, rabbit holes, and something good in the city.</p>
+      <div id="companion-chat" role="log" aria-label="Chat with Sanjana" aria-live="polite"></div>
+      <form id="companion-form">
+        <label for="companion-input">Message Sanjana</label>
+        <textarea id="companion-input" rows="2" maxlength="8000" placeholder="Find us something for this weekend…"></textarea>
+        <div class="companion-compose"><span id="companion-status" role="status"></span><button id="companion-stop" type="button" hidden>Stop</button><button id="companion-send" type="submit">Send</button></div>
+      </form>
+      <p class="companion-note">Uses your signed-in Codex subscription. While she’s here, Sanjana can explore every 20–60 minutes. Hide her to pause.</p>
       <div class="companion-settings"><label><input id="companion-motion" type="checkbox"> Still animation</label><button id="companion-hide" type="button">Hide Sanjana</button></div>
     </section>
+    <button id="companion-bubble" type="button" hidden popovertarget="companion-card" aria-label="Read Sanjana’s update"></button>
     <button id="companion-toggle" type="button" aria-label="Visit Sanjana’s corner" popovertarget="companion-card"><span id="companion-sprite" aria-hidden="true"></span><span class="companion-name">Sanjana <span aria-hidden="true">♡</span></span></button>
   </div>
   <script src="/app.js" defer></script>

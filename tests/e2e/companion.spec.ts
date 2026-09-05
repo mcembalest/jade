@@ -2,15 +2,12 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test, expect, editor } from './fixtures';
 
-test('companion cards, preferences and keyboard dismissal', async ({ page, appURL }, info) => {
+test('companion chat, preferences and keyboard dismissal', async ({ page, appURL }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(appURL);
   await page.getByRole('button', { name: 'Visit Sanjana’s corner' }).click();
-  await expect(page.getByRole('heading', { name: 'A little good in the world' })).toBeVisible();
-  await page.getByRole('button', { name: 'Another little thing' }).click();
-  await expect(page.getByRole('heading', { name: 'Something to fall in love with' })).toBeVisible();
-  await page.getByRole('button', { name: 'Another little thing' }).click();
-  await expect(page.getByRole('heading', { name: 'A lovely little rabbit hole' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Message Sanjana' })).toBeVisible();
+  await expect(page.getByRole('log')).toContainText('Tell me what you’re in the mood for');
   await page.getByRole('checkbox', { name: 'Still animation' }).check();
   await page.screenshot({path:info.outputPath('companion-desktop.png')});
   await page.getByRole('button', { name: 'Hide Sanjana' }).click();
@@ -63,4 +60,87 @@ test('returning from the companion to writing preserves focus and saves edits', 
   await page.keyboard.press('Escape');
   await expect(page.locator('#companion-card')).toBeHidden();
   await expect(page.locator('#companion-toggle')).toBeFocused();
+});
+
+test('chat sends, persists, and safely displays linked replies', async ({page,appURL}) => {
+  const state = {messages:[] as {id:string;role:string;text:string;sources?:{title:string;url:string}[]}[],enabled:true,next:Date.now()+3_600_000,seen:''};
+  await page.route('**/companion', async route => {
+    const body = route.request().postDataJSON();
+    if (body?.action === 'chat') {
+      state.messages.push({id:'1',role:'user',text:body.message},{id:'2',role:'assistant',text:'<script>alert(1)</script> A little discovery.',sources:[{title:'Read the story',url:'https://example.com/story'},{title:'Unsafe',url:'javascript:alert(1)'}]});
+    }
+    if (body?.action === 'seen') state.seen = body.seen;
+    await route.fulfill({json:state});
+  });
+  await page.goto(appURL);
+  await page.locator('#companion-toggle').click();
+  await page.getByRole('textbox',{name:'Message Sanjana'}).fill('Search for a vegetarian date spot');
+  await page.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(page.getByRole('log')).toContainText('Search for a vegetarian date spot');
+  await expect(page.getByRole('log')).toContainText('<script>alert(1)</script>');
+  await expect(page.getByRole('link',{name:'Read the story'})).toHaveAttribute('href','https://example.com/story');
+  await expect(page.getByRole('link',{name:'Unsafe'})).toHaveCount(0);
+  await expect(page.locator('#companion-input')).toHaveValue('');
+  await page.reload();
+  await page.locator('#companion-toggle').click();
+  await expect(page.getByRole('log')).toContainText('A little discovery.');
+  await page.screenshot({path:'.tmp/companion-chat-'+test.info().project.name+'.png'});
+});
+
+test('autonomous discoveries show a bubble without stealing editing focus and hide pauses them', async ({page,appURL}) => {
+  await page.clock.install();
+  let discoveries = 0;
+  const state = {messages:[] as {id:string;role:string;text:string;proactive:boolean}[],enabled:true,next:Date.now()+20*60_000,seen:''};
+  await page.route('**/companion', async route => {
+    const body = route.request().postDataJSON();
+    if (body?.action === 'discover') {
+      discoveries++;
+      state.messages.push({id:String(discoveries),role:'assistant',text:'A tiny piece of NYC history for you.',proactive:true});
+      state.next = await page.evaluate(() => Date.now()+20*60_000);
+    }
+    if (body?.action === 'enabled') state.enabled = body.enabled;
+    if (body?.action === 'seen') state.seen = body.seen;
+    await route.fulfill({json:state});
+  });
+  await page.goto(appURL);
+  await editor(page).click();
+  await page.clock.fastForward(19*60_000);
+  expect(discoveries).toBe(0);
+  await page.clock.fastForward(60_000);
+  await expect(page.locator('#companion-bubble')).toBeVisible();
+  await expect(editor(page)).toBeFocused();
+  await expect(page.locator('#companion-card')).toBeHidden();
+  await page.screenshot({path:'.tmp/companion-bubble-'+test.info().project.name+'.png'});
+  await page.locator('#companion-bubble').click();
+  await expect(page.getByRole('log')).toContainText('NYC history');
+  await expect(page.locator('#companion-bubble')).toBeHidden();
+  await page.locator('#companion-hide').click();
+  await expect.poll(() => state.enabled).toBe(false);
+  await page.clock.fastForward(61*60_000);
+  expect(discoveries).toBe(1);
+  await expect(page.locator('#companion-dock')).toBeHidden();
+});
+
+test('chat failures retain the message and requests can be stopped', async ({page,appURL}) => {
+  let fail = true;
+  await page.route('**/companion', async route => {
+    if (route.request().postDataJSON()?.action === 'chat') {
+      if (fail) await route.fulfill({status:503,body:'Run codex login and sign in with ChatGPT.'});
+      // Leave the second request pending until Stop aborts it.
+      return;
+    }
+    await route.fulfill({json:{messages:[],enabled:true,next:Date.now()+3_600_000,seen:''}});
+  });
+  await page.goto(appURL);
+  await page.locator('#companion-toggle').click();
+  await page.locator('#companion-input').fill('Hello');
+  await page.locator('#companion-input').press('Enter');
+  await expect(page.locator('#companion-status')).toContainText('codex login');
+  await expect(page.locator('#companion-input')).toHaveValue('Hello');
+  fail = false;
+  await page.locator('#companion-send').click();
+  await expect(page.locator('#companion-stop')).toBeVisible();
+  await page.locator('#companion-stop').click();
+  await expect(page.locator('#companion-status')).toHaveText('Stopped.');
+  await expect(page.locator('#companion-send')).toBeEnabled();
 });

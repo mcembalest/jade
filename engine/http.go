@@ -127,6 +127,7 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/terminals", a.guard(a.terminals))
 	mux.HandleFunc("/terminal/preference", a.guard(a.terminalPreference))
 	mux.HandleFunc("/terminal", a.guard(a.terminal))
+	mux.HandleFunc("/companion", a.guard(a.companion))
 	mux.HandleFunc("/app.js", a.guard(a.script))
 	mux.HandleFunc("/companion.png", a.guard(func(response http.ResponseWriter, request *http.Request) {
 		response.Header().Set("Content-Type", "image/png")

@@ -18,6 +18,7 @@ jade /path/to/project
 | Workspace marker | `jade.md` |
 | Saving | Autosave; wait for `Saved` before stopping |
 | Terminal | Terminal / Ghostty |
+| Companion | [Sanjana: chat and web discoveries](engine/web/companion/jade.md) |
 | Example | [MNIST: MLX, Mojo/MAX, jax-js](examples/mnist/) |
 | README | Symlink to local `jade.md` |
 

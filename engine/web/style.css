@@ -99,14 +99,17 @@ dialog::backdrop { background:#17201b4a; }
 #companion-card h2 { font:normal 23px/1.2 Georgia,serif; margin:6px 0 0; }
 #companion-close { border:0; background:transparent; font-size:21px; padding:0 6px; }
 .companion-intro { color:#68736d; line-height:1.6; margin:14px 0 18px; }
-.companion-story { padding:16px; border:1px solid #e3e8dc; border-radius:12px; background:#f2f5ed; }
-#companion-category { font-size:10px; font-weight:700; color:var(--jade); }
-.companion-sample { float:right; font-size:10px; color:#727b70; }
-#companion-card h3 { font:normal 20px/1.25 Georgia,serif; margin:13px 0 8px; }
-#companion-body { line-height:1.6; margin:0 0 16px; color:#535f54; }
-.companion-pagination { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-#companion-count { color:var(--muted); font-size:10px; }
-#companion-next { font-size:11px; border:0; background:transparent; color:var(--jade); padding:4px 0; }
+#companion-chat { display:flex; flex-direction:column; gap:12px; max-height:260px; overflow:auto; margin:16px 0; overflow-wrap:anywhere; }
+.companion-message { background:#f2f5ed; padding:12px; border-radius:12px; line-height:1.5; }
+.companion-message[data-role="user"] { background:#eee8de; margin-left:22px; }
+.companion-message p { white-space:pre-wrap; margin:5px 0; }
+.companion-message strong { font-size:11px; color:var(--jade); }
+.companion-message a { display:block; margin-top:6px; color:var(--jade); }
+#companion-form label { display:block; font-size:11px; margin-bottom:6px; }
+#companion-input { width:100%; box-sizing:border-box; resize:vertical; min-height:56px; max-height:150px; font:inherit; padding:9px; border:1px solid var(--line); border-radius:9px; background:#fffefa; }
+.companion-compose { display:flex; align-items:center; gap:8px; margin-top:6px; }
+#companion-status { flex:1; font-size:11px; color:var(--muted); overflow-wrap:anywhere; }
+#companion-bubble { position:absolute; right:180px; bottom:18px; max-width:min(320px,calc(100vw - 195px)); max-height:65px; overflow:hidden; text-overflow:ellipsis; border-radius:14px 14px 0 14px; background:#fffdf8; padding:10px 14px; text-align:left; font-size:12px; box-shadow:0 3px 12px #17312510; }
 .companion-note { font-size:11px; line-height:1.5; color:var(--muted); margin:14px 0; }
 .companion-settings { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:11px; }
 .companion-settings label { display:flex; align-items:center; gap:5px; }
