@@ -1,11 +1,5 @@
 /data/
-/python-baseline/model.json
-/python-baseline/metrics.json
-/python-baseline/report.md
-/mojo/.pixi/
-/mojo/metrics.json
-/mojo/report.md
-
 /mlx/results/
-/mojo/results/
+/mojo-max/.pixi/
+/mojo-max/results/
 __pycache__/

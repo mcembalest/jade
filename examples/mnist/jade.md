@@ -1,37 +1,33 @@
-# MNIST: from a MacBook to the browser
+# MNIST, three ways
 
-One dataset, several ways to own the training and inference stack. Explore **latency, GPU acceleration, setup simplicity, and how much code we need to control**. Accuracy tells us whether the computation is useful; it is not the main contest.
+Train a small model, keep its weights, and measure how quickly it answers. Explore GPU acceleration and how much code it takes to own the stack.
 
-![MLX CPU and GPU inference throughput across batch sizes](inference.svg)
+![MLX CPU and GPU throughput across batch sizes](inference.svg)
 
-Measured on an Apple M3 Max with MLX 0.32.2. Warm, synchronized inference; Python dispatch included. This is one local run, not a framework ranking. The [paper](paper.md) explains the measurements and their limits.
+## Choose a stack
 
-## Explore
-
-| Inner JaDE | What you can do now | Next question |
+| JaDE | Implementation | Runs on |
 | --- | --- | --- |
-| [MLX](mlx/) | Train an MLP on the Apple GPU or CPU, save/reload weights, measure latency | Where does batching make GPU execution worthwhile? |
-| [Mojo / MAX](mojo/) | Train a MAX MLP with a custom Mojo activation; save/reload and time it on CPU or Apple GPU | How do compilation, dispatch, and batching affect latency? |
-| [jax-js](jax-js/) | Train in the browser, save/reload weights, and measure WebGPU or WebAssembly inference | How much work can stay entirely inside the browser? |
-| [Python reference](python-baseline/) | Understand a ten-centroid model with no ML dependencies | What work are the accelerated stacks replacing? |
+| [MLX](mlx/) | Python with automatic differentiation | Apple GPU or CPU |
+| [Mojo/MAX](mojo-max/) | MAX graph, explicit derivatives, custom Mojo activation | Apple GPU or CPU |
+| [jax-js](jax-js/) | Browser training with automatic differentiation and Optax | WebGPU or WebAssembly |
 
-## Run the GPU experiment
+Each folder contains its code, chart, recorded measurements, and run instructions. Its `README.md` points to its `jade.md`.
 
-With [uv](https://docs.astral.sh/uv/) installed, from this directory:
+## One workload
+
+A **784 → 128 → 10 ReLU MLP**, float32 pixels scaled to [0, 1], Adam at 0.001, batch size 128, three epochs, seed 0. Use the first 10,000 training and 1,000 test images. Accuracy checks useful learning; latency and implementation simplicity are the questions.
+
+Download the four shared MNIST files once with `./fetch.sh`. They live in `data/`; each implementation writes local outputs under its own `results/`. Neither is committed.
+
+Architecture and settings match, but initialization and shuffle streams differ. MAX records graph compilation separately; jax-js includes first-use compilation in training time. Measurements are separate local runs, with potentially warm caches. A controlled framework comparison would need identical weights, timing boundaries, and repeated trials.
+
+## Rebuild the charts
+
+With [uv](https://docs.astral.sh/uv/) installed:
 
 ```sh
-./fetch.sh
-uv run --script --locked mlx/mnist.py
-uv run --script --locked mlx/mnist.py --device cpu
-```
-
-The four canonical IDX files are shared by every implementation. Downloads and framework installation happen before benchmark timing. MLX results go to `mlx/results/<device>/`.
-
-To regenerate all checked-in plots after those runs:
-
-```sh
-(cd python-baseline && MNIST_TRAIN=10000 MNIST_TEST=1000 python3 mnist.py ..)
 uv run --script --locked plot.py
 ```
 
-MLX plot inputs are recorded in [measurements.json](measurements.json); MAX and jax-js keep measurements beside their own introductions. Each framework has its own `jade.md` and matching local `README.md`; all belong to this one MNIST project.
+Every chart reads checked-in `measurements.json` files. No training or dataset download is required, and rendering never overwrites measurements. The overview chart uses the MLX CPU/GPU runs on an Apple M3 Max.

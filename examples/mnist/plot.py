@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["matplotlib==3.11.1", "numpy==2.5.2"]
 # ///
-"""Rebuild the MNIST figures from local runs and the shared dataset."""
+"""Rebuild every figure from checked-in measurements; no training or data download required."""
 import json
 from pathlib import Path
 
@@ -35,7 +35,7 @@ def clean(ax):
 
 
 def max_plot():
-    runs = json.loads((ROOT / "mojo/measurements.json").read_text())
+    runs = json.loads((ROOT / "mojo-max/measurements.json").read_text())
     run = runs["gpu"]
     row = run["inference"]
     batch128 = next(point for point in row if point["batch_size"] == 128)
@@ -59,7 +59,7 @@ def max_plot():
     axes[1].set(xscale="log", yscale="log", xlabel="Images per call", ylabel="Images / second · warm median")
     axes[1].set_xticks([1, 8, 32, 128, 1000], ["1", "8", "32", "128", "1,000"])
     for ax in axes: clean(ax)
-    finish(fig, "mojo/latency.svg", f"MAX {run['version']} + CUSTOM MOJO RELU  /  {run['hardware'].upper()}  /  CPU + METAL GPU")
+    finish(fig, "mojo-max/latency.svg", f"MAX {run['version']} + CUSTOM MOJO RELU  /  {run['hardware'].upper()}  /  CPU + METAL GPU")
 
 
 def jax_plot():
@@ -84,15 +84,11 @@ def jax_plot():
     finish(fig, "jax-js/learning.svg", f"JAX-JS / WEBGPU / APPLE GPU / {run['train']:,} DIGITS × {run['epochs']} EPOCHS / {run['training_seconds']:.2f} S TRAINING*\n*First-use compilation included; driver caches may be warm. Loading, shuffling and evaluation excluded.", subtitle_y=.85)
 
 
-def main():
-    max_plot()
-    jax_plot()
-    runs = {device: json.loads((ROOT / f"mlx/results/{device}/metrics.json").read_text())
-            for device in ["cpu", "gpu"]}
+def mlx_plots():
+    runs = json.loads((ROOT / "mlx/measurements.json").read_text())
     for run in runs.values():
         if run["training_images"] != 10000 or run["test_images"] != 1000 or len(run["epoch_seconds"]) != 3:
-            raise ValueError("plots expect default 10k/1k, three-epoch runs; rerun MLX defaults")
-    (ROOT / "measurements.json").write_text(json.dumps(runs, indent=2) + "\n")
+            raise ValueError("MLX charts require the shared 10k/1k, three-epoch workload")
     fig, ax = plt.subplots(figsize=(10, 5.6))
     fig.subplots_adjust(top=.78, bottom=.18, left=.1, right=.95)
     fig.suptitle("Tiny batches have a cost.", x=.07, ha="left", fontsize=24, fontweight="bold")
@@ -120,52 +116,8 @@ def main():
     axes[0].legend(frameon=False, labelcolor=INK)
     finish(fig, "mlx/learning.svg", "SAME ARCHITECTURE + SETTINGS  /  10,000 TRAINING IMAGES  /  TEST EVALUATION EXCLUDED FROM TIMING")
 
-    model = json.loads((ROOT / "python-baseline/model.json").read_text())
-    means = np.array(model["centroids"])
-    fig, axes = plt.subplots(2, 5, figsize=(10, 5.8))
-    fig.subplots_adjust(top=.79, bottom=.07, hspace=.36, wspace=.12)
-    fig.suptitle("Ten memories. A whole classifier.", x=.07, ha="left", fontsize=24, fontweight="bold")
-    for digit, ax in enumerate(axes.flat):
-        ax.imshow(means[digit].reshape(28, 28), cmap="magma", vmin=0, vmax=255)
-        ax.set_title(str(digit), fontsize=15, color=GOLD); ax.axis("off")
-    finish(fig, "python-baseline/centroids.svg", "ONE AVERAGE IMAGE PER DIGIT  /  FIRST 10,000 TRAINING IMAGES  /  NO NEURAL NETWORK")
-
-    distances = np.sqrt(((means[:, None] - means[None, :])**2).mean(axis=2))
-    fig, ax = plt.subplots(figsize=(9, 7))
-    fig.subplots_adjust(top=.8, bottom=.1, left=.12, right=.91)
-    fig.suptitle("Which digits look alike to the model?", x=.07, ha="left", fontsize=22, fontweight="bold")
-    art = ax.imshow(distances, cmap="magma")
-    ax.set(xticks=range(10), yticks=range(10), xlabel="Digit prototype", ylabel="Digit prototype")
-    for i in range(10):
-        for j in range(10):
-            ax.text(j, i, f"{distances[i,j]:.0f}", ha="center", va="center",
-                    color=BG if distances[i,j] > distances.max()*.65 else INK, fontsize=9)
-    fig.colorbar(art, ax=ax, label="RMS pixel distance · 0–255 intensities", shrink=.8)
-    finish(fig, "mojo/distances.svg", "SHARED CENTROID MATH  /  COMPUTED FROM PYTHON REFERENCE  /  SMALLER = MORE SIMILAR")
-
-    # PCA of a fixed prefix, with axis signs fixed for repeatable rendering.
-    images = np.frombuffer((ROOT / "data/train-images-idx3-ubyte").read_bytes(), dtype=np.uint8, offset=16)
-    images = images.reshape(-1, 784)[:4000].astype(np.float64) / 255
-    labels = np.frombuffer((ROOT / "data/train-labels-idx1-ubyte").read_bytes(), dtype=np.uint8, offset=8)[:4000]
-    images -= images.mean(axis=0)
-    values, vectors = np.linalg.eigh(images.T @ images)
-    basis = vectors[:, -2:][:, ::-1]
-    for column in range(2):
-        if basis[np.argmax(abs(basis[:, column])), column] < 0: basis[:, column] *= -1
-    points = images @ basis
-    fig, ax = plt.subplots(figsize=(10, 6.5))
-    fig.subplots_adjust(top=.81, bottom=.15, left=.1, right=.86)
-    fig.suptitle("4,000 digits. Two dimensions. A place to explore.", x=.07, ha="left", fontsize=21, fontweight="bold")
-    colors = plt.get_cmap("tab10")
-    for digit in range(10):
-        mask = labels == digit
-        ax.scatter(points[mask,0], points[mask,1], s=10, alpha=.5, color=colors(digit), label=str(digit), linewidths=0)
-    variance = values[-2:][::-1] / values.sum() * 100
-    ax.set(xlabel=f"Principal component 1 · {variance[0]:.1f}% variance",
-           ylabel=f"Principal component 2 · {variance[1]:.1f}% variance")
-    clean(ax); ax.legend(title="Digit", frameon=False, labelcolor=INK, bbox_to_anchor=(1.02, 1), loc="upper left")
-    finish(fig, "jax-js/landscape.svg", "ACTUAL MNIST DATA  /  NUMPY PCA  /  A BROWSER EXPLORATION IDEA, NOT A JAX-JS BENCHMARK")
-
 
 if __name__ == "__main__":
-    main()
+    mlx_plots()
+    max_plot()
+    jax_plot()

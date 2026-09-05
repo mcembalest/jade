@@ -6,6 +6,3 @@ platforms = ["osx-arm64", "linux-64"]
 max = "==26.5.0"
 python = "3.12.*"
 numpy = "2.2.*"
-
-[tasks]
-mnist = "mojo mnist.mojo .."

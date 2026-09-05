@@ -35,4 +35,4 @@ CHROME_CHANNEL=chrome BACKEND=webgpu TRAIN=10000 EPOCHS=3 npm test
 
 The short default test uses WebAssembly and 512 training digits. It trains through the real UI, checks falling loss, measures all six batch sizes, exports weights, reloads the page, and confirms identical test accuracy after import. It also checks device logits against an independent scalar JavaScript implementation, and verifies that malformed weights leave the model intact. Measurements and a screenshot are written to ignored `results/`.
 
-The checked-in [measurements](measurements.json) come from the full WebGPU run. After preparing the MLX and Python plot inputs [in the parent project](../jade.md), regenerate the charts with `uv run --script --locked ../plot.py` from this folder. The [pixel landscape](landscape.svg) offers another view: NumPy PCA of 4,000 shared digits.
+The checked-in [measurements](measurements.json) come from the full WebGPU run. Rebuild every chart with `uv run --script --locked ../plot.py`; no training or data download is required.
