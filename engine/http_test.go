@@ -72,7 +72,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 		`data-jade="inner"`,
 		`class="brand">JADE</span>`,
 		`rel="icon"`,
-		`🐉`,
+		`◆`,
 	} {
 		if recorder.Code != http.StatusOK || !strings.Contains(page, expected) {
 			t.Fatalf("page = %d, missing %q:\n%s", recorder.Code, expected, page)
