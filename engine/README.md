@@ -18,9 +18,7 @@
 
 ## Development
 
-Browser source, dependencies, configuration, and tests: `engine/web/`. Development requires Node and Go; installation requires Go only.
-
-From the repository root:
+Node + Go · source: `engine/web/` · run from repository root
 
 ```sh
 cd engine/web
@@ -38,18 +36,23 @@ npm test
 | `go -C ../.. run . --no-open .` | Start without opening a browser |
 | `npx playwright test tests/e2e/visual.spec.ts --update-snapshots` | Refresh visual baselines |
 
-Commit rebuilt `web/dist/` assets and visually reviewed screenshot baselines with source changes.
-Visual baselines: macOS · Chromium + WebKit · 2× density · 390–1440 px.
+| Development | Details |
+| --- | --- |
+| Commit with source | Rebuilt `web/dist/`; visually reviewed screenshot baselines |
+| Visual baselines | macOS · Chromium + WebKit · 2× · 390–1440 px |
+| Measurements | 50 KB / 500 KB / 4.5 MB · open, input-to-render, search · 3 trials |
+| Results | `.tmp/measurements/**/measurements.json`; machine-dependent |
+| Untested | OS clipboard, native IME, screen readers, editor comparisons |
 
-Measurements: 50 KB / 500 KB / 4.5 MB; opening, input-to-render, search; three trials per target.
-Results: `.tmp/measurements/**/measurements.json`. Timings are machine-dependent.
-
-Not covered: OS clipboard integration, native IME, screen readers. Automated Sublime/Cursor/Obsidian comparisons are deferred.
-
-Previews: local Markdown, text/code, images, PDFs, and folders. Hover for a temporary view; click to keep it. Links inside previews open further previews. Back or Escape returns to the parent; kept children survive closing a parent. External links open in a browser tab. Markdown previews show saved contents.
-
-Any folder can be opened; `README.md` supplies a homepage when present (case-insensitive). Nested views can read and edit parent and sibling files within the launched folder.
-
-Search: case-insensitive literal matching within the current workspace; editable text only; up to 100 results, 32 MB of contents, and two seconds. Partial results are labeled.
+| Preview / search | Behavior |
+| --- | --- |
+| Formats | Markdown, text/code, images, PDF, folders |
+| Hover / click | Temporary / kept preview |
+| Back / Escape | Parent preview; kept children persist |
+| External links | Browser tab |
+| Markdown | Saved contents |
+| Homepage | `README.md`, case-insensitive |
+| File access | Launched folder, including parent/sibling paths within it |
+| Search | Case-insensitive literal; editable text; 100 results / 32 MB / 2 s; partial results labeled |
 
 [Installation](../README.md)

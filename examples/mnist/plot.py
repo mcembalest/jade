@@ -12,6 +12,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent
@@ -167,21 +168,8 @@ def finish(fig, path):
 
 
 def overview(runs):
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6.8))
-    fig.subplots_adjust(top=0.77, bottom=0.17, left=0.23, right=0.95, wspace=0.18)
-    fig.suptitle(
-        "MNIST · five stacks, one workload",
-        x=0.04,
-        ha="left",
-        fontsize=24,
-        weight="bold",
-    )
-    fig.text(
-        0.04,
-        0.88,
-        f"{runs['numpy-cpu']['hardware'].upper()}  /  784 → 128 → 10  /  FLOAT32  /  LOWER IS FASTER",
-        color=MUTED,
-    )
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5.2))
+    fig.subplots_adjust(top=0.94, bottom=0.19, left=0.23, right=0.95, wspace=0.18)
     colors = [TEAL if runs[k]["device"] in ("gpu", "webgpu") else GOLD for k in KEYS]
     for ax, field in zip(axes, ["train", "infer"]):
         values = [
@@ -205,15 +193,15 @@ def overview(runs):
         ax.set_xscale("log")
         ax.set_xlim(min(values) / 2, max(values) * 5)
         ax.set_title(
-            "Training · 10,000 × 3 epochs"
+            "Training · 3 epochs"
             if field == "train"
-            else "Inference · one image",
+            else "Inference · 1 image",
             pad=14,
         )
         ax.set_xlabel(
-            "Milliseconds · median of 3 trials"
+            "Median training time (ms)"
             if field == "train"
-            else "Microseconds · median of 50 calls"
+            else "Median inference time (µs)"
         )
         for i, value in enumerate(values):
             ax.text(
@@ -224,28 +212,17 @@ def overview(runs):
                 fontsize=9,
             )
         clean(ax)
-    fig.text(
-        0.04,
-        0.04,
-        "Warm execution · logarithmic axes · gold: CPU/WASM, green: GPU\nTraining includes input upload + step synchronization. Inference uses resident inputs and identical untrained weights.",
-        color=MUTED,
-        fontsize=9,
+    fig.legend(
+        handles=[Patch(color=GOLD, label="CPU / WASM"), Patch(color=TEAL, label="GPU")],
+        loc="lower center", ncol=2, frameon=False,
     )
     finish(fig, "inference.svg")
 
 
-def detail(runs, backend, title, path):
+def detail(runs, backend, path):
     selected = [runs[k] for k in KEYS if runs[k]["backend"] == backend]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5.8))
-    fig.subplots_adjust(top=0.75, bottom=0.22, left=0.09, right=0.95, wspace=0.35)
-    fig.suptitle(title, x=0.07, ha="left", fontsize=24, weight="bold")
-    fig.text(
-        0.07,
-        0.86,
-        f"{runs['numpy-cpu']['hardware'].upper()}  /  SHARED WEIGHTS + SAMPLE ORDER  /  WARM EXECUTION",
-        color=MUTED,
-        fontsize=9,
-    )
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.2))
+    fig.subplots_adjust(top=0.94, bottom=0.16, left=0.09, right=0.95, wspace=0.35)
     for run, color in zip(selected, [GOLD, TEAL]):
         times = np.array(run["epoch_seconds"]) * 1000
         axes[0].plot(
@@ -254,7 +231,7 @@ def detail(runs, backend, title, path):
             "o-",
             color=color,
             lw=2,
-            label=run["device"].upper(),
+            label=LABELS[KEYS.index(f"{backend}-{run['device']}")].split(" · ")[-1],
         )
         axes[0].fill_between(
             [1, 2, 3], times.min(axis=0), times.max(axis=0), color=color, alpha=0.2
@@ -268,11 +245,11 @@ def detail(runs, backend, title, path):
             "o-",
             color=color,
             lw=2,
-            label=run["device"].upper(),
+            label=LABELS[KEYS.index(f"{backend}-{run['device']}")].split(" · ")[-1],
         )
     axes[0].set(
-        xlabel="Epoch · 10,000 images",
-        ylabel="Training · ms",
+        xlabel="Epoch",
+        ylabel="Training time (ms)",
         xticks=[1, 2, 3],
         ylim=(0, None),
     )
@@ -280,19 +257,12 @@ def detail(runs, backend, title, path):
         xscale="log",
         yscale="log",
         xlabel="Images per inference call",
-        ylabel="Images / second · median-derived",
+        ylabel="Inference throughput (images/s)",
     )
     axes[1].set_xticks([1, 128, 1000], ["1", "128", "1,000"])
     axes[0].legend(frameon=False, labelcolor=INK)
     for ax in axes:
         clean(ax)
-    fig.text(
-        0.07,
-        0.05,
-        "Training: median + range of 3 trials, upload and synchronization included.\nInference: 50 calls per point, resident inputs, identical untrained weights; compilation excluded.",
-        color=MUTED,
-        fontsize=9,
-    )
     finish(fig, path)
 
 
@@ -307,6 +277,6 @@ if __name__ == "__main__":
     if args.collect:
         tables(runs)
     overview(runs)
-    detail(runs, "mlx", "MLX · CPU and Metal", "mlx/learning.svg")
-    detail(runs, "max", "Mojo / MAX · CPU and Metal", "mojo-max/latency.svg")
-    detail(runs, "jax-js", "jax-js · WASM and WebGPU", "jax-js/learning.svg")
+    detail(runs, "mlx", "mlx/learning.svg")
+    detail(runs, "max", "mojo-max/latency.svg")
+    detail(runs, "jax-js", "jax-js/learning.svg")

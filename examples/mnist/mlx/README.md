@@ -12,7 +12,7 @@
 
 ## Run
 
-From this folder, on an Apple-silicon Mac with `uv`:
+Apple silicon · `uv`
 
 ```sh
 ../fetch.sh
@@ -20,7 +20,7 @@ uv run --script --locked ../compare.py --backend mlx --device cpu
 uv run --script --locked ../compare.py --backend mlx --device gpu
 ```
 
-Each run checks initial logits and one Adam update against NumPy, then checks trained accuracy. All timed updates and inference outputs are evaluated explicitly. Raw results: `../results/mlx-{cpu,gpu}.json`.
+Results: `../results/mlx-{cpu,gpu}.json`
 
 ## Chart
 

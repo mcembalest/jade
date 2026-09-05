@@ -1,6 +1,6 @@
 # MNIST latency
 
-![Training and single-image inference across five stacks](inference.svg)
+![MNIST training and inference latency](inference.svg)
 
 | Stack | Implementation | Devices |
 | --- | --- | --- |
@@ -12,7 +12,7 @@
 
 ## Measurements
 
-Apple M3 Max; three training trials; 50 inference calls per batch size.
+Apple M3 Max · median · 3 training trials · 50 inference calls
 
 <!-- measurements -->
 
@@ -30,7 +30,7 @@ Apple M3 Max; three training trials; 50 inference calls per batch size.
 
 <!-- /measurements -->
 
-Raw trials, inference samples, versions and compilation timings: [measurements.json](measurements.json).
+[Raw measurements](measurements.json)
 
 ## Protocol
 
@@ -45,16 +45,21 @@ Raw trials, inference samples, versions and compilation timings: [measurements.j
 | Included in training | Per-batch input upload, gradients, optimizer, synchronization |
 | Excluded from training | Imports, data preparation, graph compilation, warmup, reset, evaluation |
 | Inference | Batches 1, 128, 1,000; 5 warmups, 50 calls; synchronized fresh output |
-| Inference weights | Identical initial **untrained** weights; architecture cost, separate from accuracy checks |
+| Inference weights | Identical initial, untrained weights |
 | Inference transfers | Inputs resident; input upload and output readback excluded |
 | Validation | Initial logits + first Adam update agree with NumPy; trained accuracy ≥85% |
 | CPU threads | NumPy/PyTorch: 1; MLX/MAX/browser: runtime defaults |
 
-Local measurements on an Apple M3 Max. Runtime defaults and execution strategies differ; these are the implementations above, not each framework's best achievable speed. First-use timings can reuse compiler/driver caches. Python `setup_seconds` includes imports, setup and initial validation; browser `setup_seconds` measures parameter/optimizer initialization only. They are not comparable startup measurements. MAX compilation is recorded per graph; other first-use work can occur during validation or warmup.
+| Epoch chart | Median; shading: trial range |
+| First-use timing | Compiler/driver caches may be warm |
+| Setup timing | Python: imports + setup + validation; browser: parameter/optimizer initialization; not comparable |
+| Compilation | MAX: per graph; other runtimes: validation/warmup |
+| Scope | Recorded implementations and runtime defaults |
 
 ## Reproduce
 
-From this folder, on an Apple-silicon Mac with `uv`, `pixi`, Node.js 22+, Chrome, and Xcode's Metal Toolchain. Run backends sequentially on an idle machine.
+Apple silicon · `uv` · `pixi` · Node.js 22+ · Chrome · Xcode Metal Toolchain
+Working directory: `examples/mnist` · sequential runs · idle machine
 
 ```sh
 ./fetch.sh
@@ -71,12 +76,14 @@ done
 uv run --script --locked plot.py --collect
 ```
 
-`data/`: downloaded IDX files and generated shared fixture. `results/`: local benchmark outputs. Both are ignored. `plot.py --collect` requires all nine runs with the same fixture hash and three training trials. It updates the committed measurements, result tables and four charts.
+| Path / command | Contents / requirement |
+| --- | --- |
+| `data/` | IDX files + shared fixture; ignored |
+| `results/` | Local runs; ignored |
+| `plot.py --collect` | 9 runs, matching fixture hash, 3 trials → measurements, tables, charts |
 
 ## Rebuild charts only
 
 ```sh
 uv run --script --locked plot.py
 ```
-
-No training or dataset download required.

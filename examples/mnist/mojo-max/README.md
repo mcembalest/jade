@@ -13,7 +13,7 @@
 
 ## Run
 
-From this folder, with `pixi`:
+`pixi` · Xcode Metal Toolchain (GPU)
 
 ```sh
 ../fetch.sh
@@ -23,9 +23,9 @@ pixi run --locked python verify.py --device cpu
 pixi run --locked python verify.py --device gpu
 ```
 
-Apple GPU execution requires Xcode's Metal Toolchain. The environment pins MAX 26.5.0 and Mojo 1.0.0. macOS CPU and Metal are tested; the Linux environment is locked but untested here.
+MAX 26.5.0 · Mojo 1.0.0 · macOS CPU/Metal tested · Linux untested
 
-Separate graphs: training batches 128 and 16; inference batches 1, 128 and 1,000. Graph compilation is recorded separately from execution. First timed calls can reuse compiler/driver caches. Raw results: `../results/max-{cpu,gpu}.json`.
+Results: `../results/max-{cpu,gpu}.json` · compilation excluded from execution
 
 ## Recorded graph compilation
 

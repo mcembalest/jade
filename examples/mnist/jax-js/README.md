@@ -13,7 +13,7 @@
 
 ## Comparison
 
-From this folder, with Node.js 22+, Chrome, and `uv`:
+Node.js 22+ · Chrome · `uv`
 
 ```sh
 ../fetch.sh
@@ -23,7 +23,10 @@ npx playwright install chromium
 CHROME_CHANNEL=chrome node compare.mjs
 ```
 
-The command requests both backends explicitly in installed headless Chrome. Missing WebGPU fails the run; there is no CPU fallback. `node compare.mjs` uses bundled Chromium; WebGPU availability depends on that build. Shared initialization and sample order come from `../data/comparison.json`; both forward logits and the first Adam update are checked against NumPy. Raw results: `../results/jax-js-{wasm,webgpu}.json`.
+Chrome · WASM + WebGPU required · no fallback
+Fixture: `../data/comparison.json` · NumPy logits + Adam validation
+Results: `../results/jax-js-{wasm,webgpu}.json`
+Bundled Chromium: `node compare.mjs` (WebGPU build-dependent)
 
 ## Interactive app
 
@@ -31,9 +34,9 @@ The command requests both backends explicitly in installed headless Chrome. Miss
 npm start
 ```
 
-Open the printed local URL. Train, save/reload weights, measure inference, and export measurements. Computation stays in the browser; the server serves local files.
+Local URL → train · weights import/export · inference · measurements export
 
-The interactive app uses its own random initialization and sample order. Its training timer includes batch gathering and first-use compilation. Its exported measurements are separate from the controlled comparison above.
+App timing: independent random initialization/order; batch gathering + compilation included.
 
 ## App checks
 
@@ -41,7 +44,8 @@ The interactive app uses its own random initialization and sample order. Its tra
 npm test
 ```
 
-Headless UI checks: training, falling loss, inference, weight export/import, scalar-reference logits, malformed-checkpoint rejection. Default: WASM, 512 training images. Outputs: ignored `results/`.
+WASM · 512 images · training, inference, checkpoints, reference logits
+Outputs: `results/` (ignored)
 
 ## Chart
 

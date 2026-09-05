@@ -12,7 +12,7 @@ jade /path/to/project
 
 ## Use
 
-Opens your folder in the browser. `README.md` is its homepage when present.
+Browser editor · folder homepage: `README.md`
 
 | In JaDE | Action |
 | --- | --- |
@@ -22,6 +22,6 @@ Opens your folder in the browser. `README.md` is its homepage when present.
 | Keep open · Edit · ‹ | Keep a preview, edit its file, or return to its parent |
 | Saved | Edits are on disk; wait for this before stopping JaDE |
 
-Updates: rerun the install command.
+Update: reinstall.
 
 [Development](engine/README.md) · [MNIST example](examples/mnist/README.md)
