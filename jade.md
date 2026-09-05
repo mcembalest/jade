@@ -17,6 +17,12 @@ jade /path/to/project
 | UI | Browser |
 | Workspace marker | `jade.md` |
 | Saving | Autosave; wait for `Saved` before stopping |
+| Files | Collapsed by default; Pin keeps the browser's file sidebar open across launches |
+| Search | Filenames and saved text in the current folder; Search button or ⌘⇧F / Ctrl+Shift+F |
+| Search limits | Case-insensitive literal match; editable text only; 100 results, 32 MB of contents, 2 seconds; partial results are labeled |
+| Markdown | Show preview opens a movable floating window; close with ×; drag its title or focus the title and use arrow keys |
+| Hover preview | Hover a Markdown file or search result for 450 ms; Keep open or drag to retain it |
+| Disclosures | File folders and pending companion research start collapsed |
 | Terminal | Terminal / Ghostty |
 | Companion | [Sanjana: chat and web discoveries](engine/web/companion/jade.md) |
 | Example | [MNIST: MLX, Mojo/MAX, jax-js](examples/mnist/) |
@@ -56,7 +62,7 @@ Commit rebuilt assets and reviewed screenshot baselines with source changes.
 | Area | Checks |
 | --- | --- |
 | CodeMirror comparison | Selection, paste events, Unicode deletion, indentation, undo/redo, search/replace |
-| Writing and coding | Markdown preview, code edits, meeting notes, repeated file switching |
+| Writing and coding | File/content search, floating and hover Markdown previews, code edits, meeting notes, repeated file switching |
 | Persistence | Autosave, external edits, conflicts, restart recovery, exact saved contents |
 | Layout | Panels, dialogs, errors, previews; Chromium + WebKit |
 | Measurements | 50 KB / 500 KB / 4.5 MB; opening, input-to-render, search; 3 trials per target |

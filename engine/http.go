@@ -42,6 +42,7 @@ type pageData struct {
 	CRLF      bool
 	Files     []*fileNode
 	IsJade    bool
+	Markdown  bool
 	View      string
 	ViewURL   string
 }
@@ -119,6 +120,7 @@ func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.guard(a.home))
 	mux.HandleFunc("/file", a.guard(a.file))
+	mux.HandleFunc("/search", a.guard(a.search))
 	mux.HandleFunc("/save", a.guard(a.save))
 	mux.HandleFunc("/drafts", a.guard(a.drafts))
 	mux.HandleFunc("/new", a.guard(a.create))
@@ -254,7 +256,7 @@ func (a *app) rewriteDestination(jadePath, sourceFile string, destination []byte
 		}
 		return []byte("data:" + kind + ";base64," + base64.StdEncoding.EncodeToString(contents))
 	}
-	return []byte("/?jade=" + query(jadePath) + "&file=" + query(markerName) + "&view=" + query(rel))
+	return []byte("/?jade=" + query(jadePath) + "&file=" + query(sourceFile) + "&view=" + query(rel))
 }
 
 func (a *app) rewriteDestinations(jadePath, sourceFile string, document ast.Node) {
@@ -313,7 +315,8 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 		}
 	}
 	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Revision: fileRevision(contents), CRLF: strings.Contains(contents, "\r\n"), Files: buildFileTree(workspace), IsJade: selected == markerName}
-	if !data.IsJade {
+	data.Markdown = strings.EqualFold(filepath.Ext(selected), ".md")
+	if !data.Markdown {
 		return data, nil
 	}
 	if view != "" {
@@ -322,9 +325,12 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 		}
 	}
 	data.View = view
-	if view == "" {
+	if view == "" && data.IsJade {
 		data.ViewURL = "/front?jade=" + template.URLQueryEscaper(workspace.Path)
 	} else {
+		if view == "" {
+			view = selected
+		}
 		data.ViewURL = "/view?jade=" + template.URLQueryEscaper(workspace.Path) + "&file=" + template.URLQueryEscaper(view)
 	}
 	return data, nil
@@ -363,7 +369,7 @@ func (a *app) file(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return
 	}
-	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "revision": data.Revision, "isJade": data.IsJade, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
+	writeJSON(response, http.StatusOK, map[string]any{"selected": data.Selected, "contents": data.Contents, "revision": data.Revision, "isJade": data.IsJade, "markdown": data.Markdown, "view": data.View, "viewURL": data.ViewURL, "title": data.Workspace.Title})
 }
 
 func parseForm(response http.ResponseWriter, request *http.Request) bool {

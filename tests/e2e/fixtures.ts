@@ -93,3 +93,12 @@ export const editor = (page: Page) => page.getByRole('textbox', { name: 'Editor'
 export const documentText = async (page: Page) => (await page.locator('.cm-line').allTextContents()).join('\n');
 export const fileIs = (page: Page, name: string) => expect(page.locator('#file-name')).toHaveText(name);
 export const saved = (page: Page) => expect(page.locator('#save-status')).toHaveText('Saved');
+
+// Navigation scenarios explicitly reveal the file browser; the app starts quiet.
+export async function revealFiles(page: Page) {
+  if (await page.locator('#files-toggle').getAttribute('aria-expanded') !== 'true') await page.locator('#files-toggle').click();
+  while (await page.locator('.tree details:not([open]) > summary').count()) await page.locator('.tree details:not([open]) > summary').first().click();
+}
+export async function revealPreview(page: Page) {
+  if (await page.locator('#preview-toggle').getAttribute('aria-pressed') !== 'true') await page.locator('#preview-toggle').click();
+}

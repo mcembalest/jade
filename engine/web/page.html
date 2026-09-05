@@ -1,4 +1,4 @@
-{{define "tree"}}{{range .}}{{if .Directory}}<li><details open><summary title="{{.Name}}"><span class="folder-name">{{.Name}}</span>{{if .Jade}}<span class="jade-mark">JaDE</span>{{end}}</summary><ul>{{template "tree" .Children}}</ul></details></li>{{else}}<li><a href="{{.URL}}" data-file="{{.Path}}" data-jade="{{.JadePath}}" title="{{.Path}}" class="file-link {{if .Jade}}jade-file{{end}}">{{.Name}}</a></li>{{end}}{{end}}{{end}}<!doctype html>
+{{define "tree"}}{{range .}}{{if .Directory}}<li><details><summary title="{{.Name}}"><span class="folder-name">{{.Name}}</span>{{if .Jade}}<span class="jade-mark">JaDE</span>{{end}}</summary><ul>{{template "tree" .Children}}</ul></details></li>{{else}}<li><a href="{{.URL}}" data-file="{{.Path}}" data-jade="{{.JadePath}}" title="{{.Path}}" class="file-link {{if .Jade}}jade-file{{end}}">{{.Name}}</a></li>{{end}}{{end}}{{end}}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -9,7 +9,8 @@
 </head>
 <body data-jade="{{.Workspace.Path}}" data-file="{{.Selected}}" data-revision="{{.Revision}}" data-crlf="{{.CRLF}}">
   <header>
-    <button id="files-toggle" type="button" aria-controls="file-explorer" aria-expanded="true">Files</button>
+    <button id="files-toggle" type="button" aria-controls="file-explorer" aria-expanded="false">Files</button>
+    <button id="search-toggle" type="button">Search</button>
     <div class="identity">{{if ne .Workspace.Path "."}}<a id="workspace-root" href="/" title="Back to root workspace">JADE</a>{{else}}<span class="brand">JADE</span>{{end}}<span class="project" title="{{.Workspace.Title}}">{{.Workspace.Title}}</span><span class="path" title="{{.Workspace.Path}}">{{.Workspace.Path}}</span></div>
     <div class="header-actions">
       <button id="companion-restore" type="button" hidden>Show Sanjana</button>
@@ -18,15 +19,15 @@
     </div>
   </header>
   <div id="terminal-notice" hidden><span id="terminal-status" role="status"></span><button id="dismiss-terminal" type="button" aria-label="Dismiss terminal message">Dismiss</button></div>
-  <div id="shell">
-    <aside id="file-explorer" aria-label="Files">
-      <div class="explorer-head">Files <button id="refresh-files" type="button" title="Refresh files" aria-label="Refresh files">↻</button><button id="new-file" type="button" title="New file" aria-label="New file">+</button></div>
+  <div id="shell" class="files-hidden">
+    <aside id="file-explorer" aria-label="Files" hidden>
+      <div class="explorer-head">Files <button id="pin-files" type="button" aria-pressed="false" title="Keep files open">Pin</button><button id="refresh-files" type="button" title="Refresh files" aria-label="Refresh files">↻</button><button id="new-file" type="button" title="New file" aria-label="New file">+</button></div>
       <ul class="tree">{{template "tree" .Files}}</ul>
     </aside>
     <main id="workbench">
-      <div id="document" class="{{if .IsJade}}jade-open{{end}}">
+      <div id="document">
         <form id="editor-form" method="post" action="/save">
-          <div class="filebar"><span id="file-name" title="{{.Selected}}">{{if .Selected}}{{.Selected}}{{else}}No file selected{{end}}</span><button id="preview-toggle" type="button" aria-controls="resolved" aria-pressed="true" {{if not .IsJade}}hidden{{end}}>Hide preview</button><button id="save-now" type="button" hidden>Save</button><button id="reload-file" type="button" hidden>Reload from disk</button><button id="save-copy" type="button" hidden>Download my edits</button><span id="save-status" role="status">Saved</span></div>
+          <div class="filebar"><span id="file-name" title="{{.Selected}}">{{if .Selected}}{{.Selected}}{{else}}No file selected{{end}}</span><button id="preview-toggle" type="button" aria-controls="resolved" aria-pressed="false" {{if not .Markdown}}hidden{{end}}>Show preview</button><button id="save-now" type="button" hidden>Save</button><button id="reload-file" type="button" hidden>Reload from disk</button><button id="save-copy" type="button" hidden>Download my edits</button><span id="save-status" role="status">Saved</span></div>
           <input type="hidden" name="jade" value="{{.Workspace.Path}}">
           <input type="hidden" name="file" value="{{.Selected}}">
           <textarea id="initial-content" hidden>
@@ -35,13 +36,19 @@
           <div id="empty-editor" {{if .Selected}}hidden{{end}}>Choose a file from Files, or create a new one.</div>
           <div id="editor"></div>
         </form>
-        <section id="resolved" {{if not .IsJade}}hidden{{end}}>
-          <div class="filebar"><span id="view-name" title="{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}">Preview{{if .View}} · {{.View}}{{end}}</span></div>
+        <section id="resolved" role="dialog" aria-label="Markdown preview" hidden>
+          <div class="filebar preview-heading"><button id="preview-handle" type="button" aria-label="Move preview" title="Drag or use arrow keys to move"><span id="view-name" title="{{if .View}}{{.View}}{{else}}{{.Workspace.Title}}{{end}}">Preview{{if .View}} · {{.View}}{{else}} · {{.Selected}}{{end}}</span></button><button id="preview-keep" type="button">Keep open</button><button id="preview-close" type="button" aria-label="Close preview">×</button></div>
           <iframe id="view-frame" sandbox="allow-top-navigation-by-user-activation" src="{{.ViewURL}}" title="Resolved JaDE view"></iframe>
         </section>
       </div>
     </main>
   </div>
+  <dialog id="search-dialog" aria-label="Search files">
+    <div class="search-heading"><label for="search-input">Search files</label><button id="search-close" type="button" aria-label="Close search">×</button></div>
+    <input id="search-input" type="search" maxlength="200" placeholder="A filename or something you remember…" autocomplete="off" autofocus>
+    <p id="search-status" role="status">Search filenames and saved text in this folder.</p>
+    <div id="search-results" aria-label="Search results"></div>
+  </dialog>
   <dialog id="new-file-dialog" aria-label="New file">
     <form id="new-file-form">
       <label>New file path <input name="path" required autofocus autocomplete="off" placeholder="notes/draft.md" aria-describedby="new-file-error"></label>
@@ -53,7 +60,7 @@
     <section id="companion-card" aria-label="Sanjana’s corner" popover="auto">
       <div class="companion-heading"><div><span class="companion-eyebrow">A LITTLE COMPANY</span><h2>Sanjana’s corner</h2></div><button id="companion-close" type="button" autofocus aria-label="Close Sanjana’s corner">×</button></div>
       <p class="companion-intro">Fashion, rabbit holes, and something good in the city.</p>
-      <details id="companion-research-panel" open>
+      <details id="companion-research-panel">
         <summary>Pending research <span id="companion-research-count">0</span></summary>
         <p id="companion-research-status" class="companion-note"></p>
         <div id="companion-research" aria-label="Pending research"></div>

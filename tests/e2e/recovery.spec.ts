@@ -1,4 +1,4 @@
-import { test, expect, editor, documentText, saved } from './fixtures';
+import { revealFiles, test, expect, editor, documentText, saved } from './fixtures';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -107,6 +107,7 @@ test('failed draft lookup never offers a different file’s drafts', async ({ pa
     }
     return route.continue();
   });
+  await revealFiles(page);
   await page.getByRole('link', { name: 'code.py', exact: true }).click();
   await expect(page.locator('#draft-status')).toContainText('Cannot load');
   await expect(page.getByRole('button', { name: 'Recover draft', exact: true })).not.toBeVisible();

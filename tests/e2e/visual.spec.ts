@@ -1,4 +1,4 @@
-import { test, expect, editor, saved } from './fixtures';
+import { revealFiles, revealPreview, test, expect, editor, saved } from './fixtures';
 import { mkdir, writeFile, readFile, cp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
@@ -50,17 +50,20 @@ for (const size of [{width:1440,height:900},{width:900,height:600},{width:760,he
     await expect(page).toHaveScreenshot(`workspace-${size.width}.png`, {scale:'css'});
     await page.screenshot({scale:'css',path:info.outputPath('workspace.png')});
     if (await page.locator('#preview-toggle').getAttribute('aria-pressed') === 'false') await page.locator('#preview-toggle').click();
-    await fits(page, ['#editor', '#view-frame']);
+    await fits(page, ['#preview-close', '#view-frame']);
+    await revealPreview(page);
     const preview = page.frameLocator('#view-frame');
     await expect(preview.getByRole('heading', {level:1})).toBeVisible();
     expect(await preview.locator('html').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
     await preview.locator('body').evaluate(node => node.ownerDocument.defaultView!.scrollTo(0, node.scrollHeight));
     await page.screenshot({scale:'css',path:info.outputPath('preview-bottom.png')});
-    await page.locator('#preview-toggle').click();
+    await page.locator('#preview-close').click();
     await expect(page.locator('#resolved')).not.toBeVisible();
     await page.locator('#preview-toggle').click();
     await expect(page.locator('#resolved')).toBeVisible();
+    await page.locator('#preview-close').click();
     if (await page.locator('#files-toggle').getAttribute('aria-expanded') === 'false') await page.locator('#files-toggle').click();
+    await revealFiles(page);
     await page.getByRole('link', {name:longName,exact:true}).click();
     await expect(page.locator('#file-name')).toHaveText(longName);
     await expect(page.locator('body')).toHaveAttribute('data-drafts-ready', 'true');
@@ -82,6 +85,7 @@ test('new file errors stay in the dialog and retry succeeds', async ({page,appUR
   await page.setViewportSize({width:390,height:640});
   await page.goto(appURL+'/?file=notes.txt');
   await page.locator('#files-toggle').click();
+  await revealFiles(page);
   await page.locator('#new-file').click();
   const path = page.getByRole('textbox',{name:'New file path'});
   await path.fill('notes.txt');
@@ -132,7 +136,9 @@ test('recovery has a visible Save action and errors leave room for editing', asy
   await expect(page.getByRole('button',{name:'Save',exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Save',exact:true}).click();
   await saved(page);
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Recovered note',exact:true})).toBeVisible();
+  await page.locator('#preview-close').click();
   await page.route('**/save',route=>route.fulfill({status:503,body:longError}));
   await editor(page).fill('Unsaved');
   await editor(page).press('ControlOrMeta+s');
@@ -147,19 +153,25 @@ test('linked artifacts are explicit and remain selected across refresh', async (
   await writeFile(join(workspace,'artifact.md'),'# Artifact output\n');
   await writeFile(join(workspace,'jade.md'),'# Workspace introduction\n\n[Read the artifact](artifact.md)\n');
   await page.goto(appURL);
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Workspace introduction',exact:true})).toBeVisible();
   // WebKit 26.6 emits this native sandbox diagnostic during the click even
   // though user-activated navigation succeeds. Keep the sandbox and assert
   // both the exact diagnostic and the resulting navigation, not a blanket filter.
   if (browserName === 'webkit') expectedPageErrors.push(`${appURL.replace('http:/','')}/' from frame with URL '${appURL}/front?jade=.'. The frame attempting navigation of the top-level window is sandboxed, but the 'allow-top-navigation' flag is not set.\n`);
+  await revealFiles(page);
   await page.frameLocator('#view-frame').getByRole('link',{name:'Read the artifact'}).click();
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Artifact output',exact:true})).toBeVisible();
   await editor(page).fill('# Workspace updated\n\n[Read the artifact](artifact.md)\n');
   await editor(page).press('ControlOrMeta+s');
   await saved(page);
   await expect(page.locator('.project')).toHaveText('Workspace updated');
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Artifact output',exact:true})).toBeVisible();
+  await revealFiles(page);
   await page.locator('.file-link[data-file="jade.md"][data-jade="."]').click();
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Workspace updated',exact:true})).toBeVisible();
 });
 
@@ -168,8 +180,10 @@ test('folders, go-to-line, dialog Escape and backup messages behave through navi
   await expect(page.locator('body')).toHaveAttribute('data-drafts-ready','true');
   const folder=page.locator('summary').filter({hasText:'a-very-long-directory-name'});
   const nested=page.locator('a[data-file="a-very-long-directory-name-that-needs-an-ellipsis/notes.txt"]');
-  await folder.click(); await expect(nested).not.toBeVisible();
+  await page.locator('#files-toggle').click();
+  await expect(nested).not.toBeVisible();
   await folder.click(); await expect(nested).toBeVisible();
+  await folder.click(); await expect(nested).not.toBeVisible();
   await editor(page).press('ControlOrMeta+Alt+g');
   await expect(page.locator('.cm-goto-line')).toBeVisible();
   await fits(page,['.cm-goto-line']);
@@ -178,6 +192,7 @@ test('folders, go-to-line, dialog Escape and backup messages behave through navi
   await page.locator('.cm-goto-line input').press('Enter');
   await expect(page.locator('.cm-goto-line')).not.toBeVisible();
   await expect(page.locator('.cm-lineNumbers .cm-activeLineGutter')).toHaveText('95');
+  await revealFiles(page);
   await page.locator('#new-file').click();
   await page.getByRole('textbox',{name:'New file path'}).press('Escape');
   await expect(page.locator('#new-file-dialog')).not.toBeVisible();
@@ -189,6 +204,7 @@ test('folders, go-to-line, dialog Escape and backup messages behave through navi
   await expect(page.locator('#draft-status')).toContainText('Recovery backup unavailable');
   await fits(page,['#draft-status','#editor']);
   await page.screenshot({scale:'css',path:info.outputPath('backup-error.png')});
+  await revealFiles(page);
   await page.getByRole('link',{name:'code.py',exact:true}).click();
   await expect(page.locator('#file-name')).toHaveText('code.py');
   await expect(page.locator('#draft-status')).toBeEmpty();
@@ -200,19 +216,25 @@ test('empty workspace and live resizing keep navigation usable', async ({page,ap
   await page.goto(appURL);
   await expect(page.locator('#empty-editor')).toBeVisible();
   await expect(page.locator('#preview-toggle')).not.toBeVisible();
+  await revealFiles(page);
   await fits(page,['#empty-editor','#new-file']);
   await page.screenshot({scale:'css',path:info.outputPath('empty-workspace.png')});
+  await revealFiles(page);
   await page.locator('#new-file').click();
   await page.getByRole('textbox',{name:'New file path'}).fill('jade.md');
   await page.getByRole('button',{name:'Create file',exact:true}).click();
   await expect(page.locator('#file-name')).toHaveText('jade.md');
+  await revealPreview(page);
   await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Untitled JaDE'})).toBeVisible();
   await page.setViewportSize({width:390,height:640});
   await expect(page.locator('#file-explorer')).not.toBeVisible();
-  await page.locator('#preview-toggle').click();
+  await page.locator('#preview-close').click();
   await fits(page,['#editor','#files-toggle','#preview-toggle']);
   await page.setViewportSize({width:1440,height:900});
-  await expect(page.locator('#file-explorer')).toBeVisible();
+  await expect(page.locator('#file-explorer')).not.toBeVisible();
+  await revealFiles(page);
   await page.locator('#preview-toggle').click();
-  await fits(page,['#editor','#view-frame','#file-explorer']);
+  await fits(page,['#view-frame','#preview-close']);
+  await page.locator('#preview-close').click();
+  await fits(page,['#editor','#file-explorer']);
 });

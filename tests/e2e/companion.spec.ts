@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { test, expect, editor } from './fixtures';
+import { revealFiles, test, expect, editor } from './fixtures';
 
 test('companion chat, preferences and keyboard dismissal', async ({ page, appURL }, info) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -46,6 +46,7 @@ test('hidden companion controls fit a narrow window', async ({page,appURL}) => {
 
 test('returning from the companion to writing preserves focus and saves edits', async ({page,appURL,workspace}) => {
   await page.goto(appURL);
+  await revealFiles(page);
   await page.getByRole('link', {name:'notes.txt',exact:true}).click();
   await page.locator('#companion-toggle').click();
   await editor(page).click();
@@ -116,6 +117,9 @@ test('hourly pending research is visible before one evening update', async ({pag
   await editor(page).click();
   await expect(page.locator('#companion-bubble')).toBeHidden();
   await page.locator('#companion-toggle').click();
+  await expect(page.locator('#companion-research')).toBeHidden();
+  await page.locator('#companion-research-panel summary').click();
+  await expect(page.locator('#companion-research')).toBeVisible();
   await expect(page.locator('#companion-research')).toContainText('NYC history find 1');
   await expect(page.getByRole('link',{name:'Original source 1'})).toHaveAttribute('href','https://example.com/1');
   await expect(page.locator('#companion-research-status')).toContainText('Last checked');

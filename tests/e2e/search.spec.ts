@@ -1,0 +1,136 @@
+import { test, expect, editor, fileIs, saved } from './fixtures';
+import { writeFile, mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+test('quiet defaults and a pinned file browser survive navigation and reload', async ({page,appURL,app}) => {
+  await page.goto(appURL);
+  await expect(page.locator('#file-explorer')).toBeHidden();
+  await expect(page.locator('#resolved')).toBeHidden();
+  await page.locator('#files-toggle').click();
+  await expect(page.locator('.tree details[open]')).toHaveCount(0);
+  await page.getByRole('link',{name:'notes.txt',exact:true}).click();
+  await fileIs(page,'notes.txt');
+  await expect(page.locator('#file-explorer')).toBeHidden();
+  await page.locator('#files-toggle').click();
+  await page.locator('#pin-files').click();
+  await page.getByRole('link',{name:'code.py',exact:true}).click();
+  await fileIs(page,'code.py');
+  await expect(page.locator('#file-explorer')).toBeVisible();
+  await page.goto(await app.restart());
+  await expect(page.locator('#file-explorer')).toBeVisible();
+  await page.locator('#pin-files').click();
+  await page.reload();
+  await expect(page.locator('#file-explorer')).toBeHidden();
+});
+
+test('search opens a matching passage, saves the previous file and returns to editing', async ({page,appURL,workspace}) => {
+  await mkdir(join(workspace,'notes'));
+  await writeFile(join(workspace,'notes/weekend.md'),'# Weekend\n\nAvocado sushi with Chellam.\n');
+  await page.goto(appURL+'/?file=notes.txt');
+  await editor(page).fill('Remember this edit');
+  await page.locator('#search-toggle').click();
+  await page.locator('#search-input').fill('AVOCADO');
+  await expect(page.locator('#search-results')).toContainText('Avocado sushi with Chellam.');
+  await page.locator('#search-input').press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await fileIs(page,'notes/weekend.md');
+  await expect(editor(page)).toBeFocused();
+  expect(await readFile(join(workspace,'notes.txt'),'utf8')).toBe('Remember this edit');
+  await expect(page.locator('.cm-lineNumbers .cm-activeLineGutter')).toHaveText('3');
+  await expect(page.locator('#resolved')).toBeHidden();
+  await page.locator('#preview-toggle').click();
+  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Weekend'})).toBeVisible();
+  await editor(page).fill('# Revised weekend\n\nA new plan.');
+  await editor(page).press('ControlOrMeta+s'); await saved(page);
+  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Revised weekend'})).toBeVisible();
+  await editor(page).press('ControlOrMeta+Shift+f');
+  await page.locator('#search-input').fill('code.py');
+  await expect(page.locator('#search-results')).toContainText('Filename match');
+  await page.locator('#search-input').press('Enter');
+  await fileIs(page,'code.py');
+  await expect(page.locator('#preview-toggle')).toBeHidden();
+});
+
+test('search handles no results, server failure, cancellation and a narrow window', async ({page,appURL},info) => {
+  await page.setViewportSize({width:390,height:640});
+  await page.goto(appURL);
+  await page.locator('#search-toggle').click();
+  await page.locator('#search-input').fill('nonexistentphrase');
+  await expect(page.locator('#search-status')).toHaveText('No matches.');
+  await page.route('**/search?**',r=>r.fulfill({status:503,body:'Try again'}));
+  await page.locator('#search-input').fill('notes');
+  await expect(page.locator('#search-status')).toContainText('Search unavailable');
+  await page.unroute('**/search?**');
+  await page.locator('#search-input').fill('note');
+  await expect(page.locator('#search-results button').first()).toBeVisible();
+  const box = (await page.locator('#search-dialog').boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x+box.width).toBeLessThanOrEqual(390);
+  await page.screenshot({path:info.outputPath('search-narrow.png')});
+  await page.locator('#search-input').press('Escape');
+  await expect(page.locator('#search-dialog')).toBeHidden();
+  await expect(page.locator('#search-toggle')).toBeFocused();
+});
+
+test('a failed save prevents search navigation without losing the edit', async ({page,appURL}) => {
+  await page.goto(appURL+'/?file=notes.txt');
+  await page.route('**/save',r=>r.fulfill({status:503,body:'Disk unavailable'}));
+  await editor(page).fill('Keep this');
+  await page.locator('#search-toggle').click();
+  await page.locator('#search-input').fill('code.py');
+  await expect(page.locator('#search-results button')).toHaveCount(1);
+  await page.locator('#search-input').press('Enter');
+  await expect(page.locator('#save-status')).toContainText('Not saved');
+  await fileIs(page,'notes.txt');
+  await expect(editor(page)).toHaveText('Keep this');
+});
+
+test('Markdown hover previews dismiss, stay open, move and leave editor layout unchanged', async ({page,appURL,workspace},info) => {
+  await writeFile(join(workspace,'reading.md'),'# Reading list\n\nA beautiful weekend.\n');
+  await page.goto(appURL+'/?file=notes.txt');
+  await page.locator('#files-toggle').click();
+  const before = await page.locator('#editor').boundingBox();
+  await page.getByRole('link',{name:'reading.md',exact:true}).hover();
+  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Reading list'})).toBeVisible();
+  await fileIs(page,'notes.txt');
+  expect(await page.locator('#editor').boundingBox()).toEqual(before);
+  await page.locator('#files-toggle').hover();
+  await expect(page.locator('#resolved')).toBeHidden();
+  await page.getByRole('link',{name:'reading.md',exact:true}).hover();
+  await expect(page.locator('#preview-keep')).toBeVisible();
+  await page.locator('#preview-keep').click();
+  await page.locator('#files-toggle').hover();
+  await expect(page.locator('#resolved')).toBeVisible();
+  const initial = (await page.locator('#resolved').boundingBox())!;
+  const handle = (await page.locator('#preview-handle').boundingBox())!;
+  await page.mouse.move(handle.x+30,handle.y+12); await page.mouse.down();
+  await page.mouse.move(handle.x-90,handle.y+62,{steps:8}); await page.mouse.up();
+  const moved = (await page.locator('#resolved').boundingBox())!;
+  expect(moved.x).toBeLessThan(initial.x); expect(moved.y).toBeGreaterThan(initial.y);
+  await page.screenshot({path:info.outputPath('floating-preview.png')});
+  await editor(page).fill('Editing beside the preview');
+  await editor(page).press('ControlOrMeta+s'); await saved(page);
+  await expect(page.frameLocator('#view-frame').getByRole('heading',{name:'Reading list'})).toBeVisible();
+  await page.setViewportSize({width:390,height:640});
+  await expect.poll(async () => { const box=(await page.locator('#resolved').boundingBox())!; return box.x+box.width; }).toBeLessThanOrEqual(390);
+  const narrow=(await page.locator('#resolved').boundingBox())!;
+  expect(narrow.x).toBeGreaterThanOrEqual(0); expect(narrow.x+narrow.width).toBeLessThanOrEqual(390);
+  expect(narrow.y+narrow.height).toBeLessThanOrEqual(640);
+  await page.screenshot({path:info.outputPath('floating-preview-narrow.png')});
+  await page.locator('#preview-close').click();
+  await expect(page.locator('#resolved')).toBeHidden();
+});
+
+test('search result hover previews remain interactive inside the search dialog', async ({page,appURL}) => {
+  await page.goto(appURL+'/?file=notes.txt');
+  await page.locator('#search-toggle').click();
+  await page.locator('#search-input').fill('jade.md');
+  await page.locator('#search-results button').first().hover();
+  await expect(page.locator('#preview-keep')).toBeVisible();
+  await page.locator('#preview-keep').click();
+  await page.locator('#search-input').press('Escape');
+  await expect(page.locator('#search-dialog')).toBeHidden();
+  await expect(page.locator('#resolved')).toBeVisible();
+  await page.locator('#preview-handle').focus();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#resolved')).toBeHidden();
+});

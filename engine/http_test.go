@@ -68,7 +68,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 		`aria-label="Files"`,
 		`id="terminal-toggle"`,
 		`id="terminal-select"`,
-		`id="document" class="jade-open"`,
+		`id="document"`,
 		`data-jade="inner"`,
 		`class="brand">JADE</span>`,
 		`rel="icon"`,
@@ -218,8 +218,8 @@ func TestReportLinksResolveBesideReport(t *testing.T) {
 		image                   bool
 	}{
 		{"local image", "latency.svg", "data:image/svg+xml;base64,", true},
-		{"sibling report", "next.md", "/?jade=.&file=jade.md&view=reports%2Fnext.md", false},
-		{"parent file", "../notes.go", "/?jade=.&file=jade.md&view=notes.go", false},
+		{"sibling report", "next.md", "/?jade=.&file=reports%2Fresult.md&view=reports%2Fnext.md", false},
+		{"parent file", "../notes.go", "/?jade=.&file=reports%2Fresult.md&view=notes.go", false},
 		{"outside workspace", "../../outside.svg", "../../outside.svg", true},
 		{"external link", "https://example.com/paper", "https://example.com/paper", false},
 	} {

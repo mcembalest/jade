@@ -8,10 +8,12 @@ import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { go } from '@codemirror/lang-go';
 import { initTerminals } from './terminal.js';
+import { initSearch } from './search.js';
+import { initPreview } from './preview.js';
 
 interface Draft { id: string; token: string; content: string; revision: string; updated: string }
 interface DraftOwner { id: string; queue: Promise<void>; version: number; draft: Draft | null }
-interface FileData { selected: string; contents: string; revision: string; isJade: boolean; view: string; viewURL: string; title: string }
+interface FileData { selected: string; contents: string; revision: string; isJade: boolean; markdown: boolean; view: string; viewURL: string; title: string }
 interface ActiveFile { file: string; revision: string; saved: string }
 class HTTPError extends Error {
   constructor(message: string, readonly code: number) { super(message); }
@@ -27,9 +29,11 @@ const status = document.querySelector<HTMLElement>('#save-status')!;
 const reloadButton = document.querySelector<HTMLButtonElement>('#reload-file')!;
 const copyButton = document.querySelector<HTMLButtonElement>('#save-copy')!;
 const saveButton = document.querySelector<HTMLButtonElement>('#save-now')!;
-const previewButton = document.querySelector<HTMLButtonElement>('#preview-toggle')!;
-const compact = matchMedia('(max-width:700px)');
-let previewOpen = !compact.matches;
+const updatePreview = initPreview();
+let filesPinned = false;
+try { filesPinned = document.cookie.split('; ').includes('jade-files-pinned=true'); } catch (_) {}
+const pinFiles = document.querySelector<HTMLButtonElement>('#pin-files')!;
+pinFiles.setAttribute('aria-pressed', String(filesPinned));
 const filesButton = document.querySelector<HTMLButtonElement>('#files-toggle')!;
 function showFiles(open: boolean) {
   const explorer = document.querySelector<HTMLElement>('#file-explorer')!;
@@ -39,17 +43,12 @@ function showFiles(open: boolean) {
   filesButton.setAttribute('aria-expanded', String(open));
 }
 filesButton.addEventListener('click', () => showFiles(filesButton.getAttribute('aria-expanded') !== 'true'));
-showFiles(!compact.matches);
-compact.addEventListener('change', () => showFiles(!compact.matches));
-function showPreview() {
-  const visible = !previewButton.hidden && previewOpen;
-  document.querySelector<HTMLElement>('#document')!.classList.toggle('jade-open', visible);
-  document.querySelector<HTMLElement>('#resolved')!.hidden = !visible;
-  previewButton.setAttribute('aria-pressed', String(visible));
-  previewButton.textContent = visible ? 'Hide preview' : 'Show preview';
-}
-previewButton.addEventListener('click', () => { previewOpen = !previewOpen; showPreview(); });
-showPreview();
+showFiles(filesPinned);
+pinFiles.addEventListener('click', () => {
+  filesPinned = !filesPinned;
+  pinFiles.setAttribute('aria-pressed', String(filesPinned));
+  try { document.cookie = `jade-files-pinned=${filesPinned}; Path=/; Max-Age=31536000; SameSite=Strict`; } catch (_) {}
+});
 const viewFrame = document.querySelector<HTMLIFrameElement>('#view-frame')!;
 const readOnly = new Compartment();
 const sessions = new Map<string, {state: EditorState; revision: string; scroll: number}>();
@@ -187,18 +186,11 @@ function fileURL(file = active.file) {
   if (file === active.file && view) url.searchParams.set('view', view);
   return url;
 }
-function refreshPreview(data: FileData) {
+function refreshPreview(data: FileData, changedFile = false) {
   document.querySelector<HTMLElement>('.project')!.textContent = data.title;
   document.querySelector<HTMLElement>('.project')!.title = data.title;
   document.title = data.title + ' · JaDE';
-  const visible = data.isJade;
-  previewButton.hidden = !visible;
-  showPreview();
-  if (visible) {
-    viewFrame.src = data.viewURL;
-    document.querySelector<HTMLElement>('#view-name')!.textContent = data.view ? 'Preview · ' + data.view : 'Preview';
-    document.querySelector<HTMLElement>('#view-name')!.title = data.view || data.title;
-  }
+  updatePreview(data.viewURL, data.view ? 'Preview · ' + data.view : 'Preview · ' + data.selected, data.markdown, changedFile);
 }
 async function save() {
   clearTimeout(autosaveTimer);
@@ -241,7 +233,7 @@ async function leave(action: () => Promise<void>) {
   catch (error) { report((error instanceof Error ? error.message : String(error)), true); }
   finally { moving = false; freeze(false); }
 }
-async function showFile(data: FileData, href: string, link: HTMLAnchorElement) {
+async function showFile(data: FileData, href: string) {
   sessions.set(active.file, {state:editor.state, revision:active.revision, scroll:editor.scrollDOM.scrollTop});
   const cached = sessions.get(data.selected);
   active = {file:data.selected, saved:data.contents, revision:data.revision};
@@ -252,13 +244,13 @@ async function showFile(data: FileData, href: string, link: HTMLAnchorElement) {
   document.querySelector<HTMLElement>('#file-name')!.textContent = data.selected || 'No file selected';
   document.querySelector<HTMLElement>('#file-name')!.title = data.selected;
   document.querySelector<HTMLElement>('#empty-editor')!.hidden = !!data.selected;
-  document.querySelectorAll<HTMLAnchorElement>('.file-link').forEach(node => node.classList.toggle('active', node === link));
+  document.querySelectorAll<HTMLAnchorElement>('.file-link').forEach(node => node.classList.toggle('active', node.dataset.file === data.selected && node.dataset.jade === body.dataset.jade));
   if (href) {
     history.pushState({jadeIndex:++historyIndex}, '', href);
     activeURL = location.href;
   }
-  refreshPreview(data); report('Saved'); await loadDrafts();
-  if (compact.matches) showFiles(false);
+  refreshPreview(data, true); report('Saved'); await loadDrafts();
+  if (!filesPinned) showFiles(false);
   editor.focus();
 }
 document.querySelector<HTMLElement>('#workspace-root')!?.addEventListener('click', event => {
@@ -270,10 +262,10 @@ document.querySelectorAll<HTMLAnchorElement>('.file-link').forEach(link => {
     event.preventDefault();
     leave(async () => {
       if (link.dataset.jade !== body.dataset.jade!) { location.href = link.href; return; }
-      if (link.dataset.file === active.file && !new URL(location.href).searchParams.has('view')) return;
+      if (link.dataset.file === active.file && !new URL(location.href).searchParams.has('view')) { if (!filesPinned) showFiles(false); editor.focus(); return; }
       const url = fileURL(link.dataset.file!); url.searchParams.delete('view');
       const data: FileData = await (await request(url)).json();
-      await showFile(data, link.href, link);
+      await showFile(data, link.href);
     });
   });
 });
@@ -343,7 +335,7 @@ async function checkDisk() {
         report('Updated from disk');
       }
     }
-    if (!dirty() && !conflict && data.isJade) {
+    if (!dirty() && !conflict && data.markdown) {
       // Refresh changed Markdown and linked output paths without reloading an unchanged preview.
       const signature = data.revision + ':' + data.viewURL;
       if (viewFrame.dataset.signature !== signature) {
@@ -420,6 +412,21 @@ newFileForm.addEventListener('submit', async event => {
     for (const control of newFileControls) control.disabled = false;
     if (newFileError.textContent) newFilePath.focus();
   }
+});
+initSearch(async (file, line) => {
+  await leave(async () => {
+    if (file !== active.file || new URL(activeURL).searchParams.has('view')) {
+      const url = fileURL(file); url.searchParams.delete('view');
+      const data: FileData = await (await request(url)).json();
+      const href = new URL(url); href.pathname = '/';
+      await showFile(data, href.href);
+    }
+    if (line) {
+      const target = editor.state.doc.line(Math.min(line, editor.state.doc.lines));
+      editor.dispatch({selection:{anchor:target.from, head:target.to}, effects:EditorView.scrollIntoView(target.from, {y:'center'})});
+    }
+    editor.focus();
+  });
 });
 const openTerminal = initTerminals(body, document.querySelector<HTMLElement>('#terminal-status')!);
 addEventListener('keydown', event => {

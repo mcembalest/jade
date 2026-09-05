@@ -1,4 +1,4 @@
-import { test, expect, editor, documentText, fileIs, saved } from './fixtures';
+import { revealFiles, revealPreview, test, expect, editor, documentText, fileIs, saved } from './fixtures';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -22,6 +22,7 @@ test('writing: draft Markdown, revise a phrase, preview, and reopen', async ({pa
   await editor(page).press('ControlOrMeta+s'); await saved(page);
   const expected = draft.replace('second check','fresh run');
   expect(await readFile(join(workspace,'jade.md'),'utf8')).toBe(expected);
+  await revealPreview(page);
   const preview = page.frameLocator('#view-frame');
   await expect(preview.getByRole('heading',{name:'Experiment notes'})).toBeVisible();
   await expect(preview.locator('p')).toHaveText('The first result needs a fresh run.');
@@ -41,9 +42,11 @@ test('coding: type a function, indent, toggle comments, and save', async ({page,
   expect(await documentText(page)).toContain('# return x * x');
   await editor(page).press('ControlOrMeta+/');
   expect(await documentText(page)).toBe(code);
+  await revealFiles(page);
   await page.getByRole('link',{name:'notes.txt',exact:true}).click();
   await fileIs(page,'notes.txt');
   expect(await readFile(join(workspace,'code.py'),'utf8')).toBe(code);
+  await revealFiles(page);
   await page.getByRole('link',{name:'code.py',exact:true}).click();
   await fileIs(page,'code.py'); await ready(page);
   expect(await documentText(page)).toBe(code);
@@ -51,6 +54,7 @@ test('coding: type a function, indent, toggle comments, and save', async ({page,
 
 test('notes: create a meeting note, continue a list, switch workspace, return', async ({page,appURL,workspace}) => {
   await page.goto(appURL); await ready(page);
+  await revealFiles(page);
   await page.getByRole('button',{name:'New file',exact:true}).click();
   await page.getByRole('textbox',{name:'New file path'}).fill('meetings/2026-09-04.md');
   await page.getByRole('button',{name:'Create file',exact:true}).click();
@@ -61,11 +65,13 @@ test('notes: create a meeting note, continue a list, switch workspace, return', 
   await editor(page).pressSequentially('Repeat on GPU');
   const note = '# Meeting\n\n- Check latency\n- Repeat on GPU';
   expect(await documentText(page)).toBe(note);
+  await revealFiles(page);
   await page.locator('a[data-jade="inner"][data-file="inner/jade.md"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-jade','inner');
   expect(await readFile(join(workspace,'meetings/2026-09-04.md'),'utf8')).toBe(note);
   await page.getByRole('link',{name:'JADE',exact:true}).click();
   await ready(page);
+  await revealFiles(page);
   await page.getByRole('link',{name:'2026-09-04.md',exact:true}).click();
   await fileIs(page,'meetings/2026-09-04.md'); await ready(page);
   expect(await documentText(page)).toBe(note);
@@ -74,6 +80,7 @@ test('notes: create a meeting note, continue a list, switch workspace, return', 
 test('navigation: edit two files and use browser Back and Forward', async ({page,appURL,workspace}) => {
   await page.goto(appURL+'/?file=notes.txt'); await ready(page);
   await editor(page).fill('Note before switching');
+  await revealFiles(page);
   await page.getByRole('link',{name:'code.py',exact:true}).click();
   await fileIs(page,'code.py'); await ready(page);
   await editor(page).fill('print("updated")');
@@ -105,6 +112,7 @@ test('reading: a report in a subdirectory resolves its own figure', async ({page
   await writeFile(join(workspace,'reports/result.md'),'# Result\n\n![Latency plot](latency.svg)\n');
   await writeFile(join(workspace,'reports/latency.svg'),'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="green"/></svg>');
   await page.goto(appURL+'/?view=reports/result.md'); await ready(page);
+  await revealPreview(page);
   const preview = page.frameLocator('#view-frame');
   await expect(preview.getByRole('heading',{name:'Result'})).toBeVisible();
   await expect.poll(()=>preview.getByRole('img',{name:'Latency plot'}).evaluate(i=>(i as HTMLImageElement).naturalWidth)).toBe(200);
@@ -113,6 +121,7 @@ test('reading: a report in a subdirectory resolves its own figure', async ({page
 
 test('navigation failure: Back keeps the current file and address until edits are saved', async ({page,appURL,workspace}) => {
   await page.goto(appURL+'/?file=notes.txt'); await ready(page);
+  await revealFiles(page);
   await page.getByRole('link',{name:'code.py',exact:true}).click();
   await fileIs(page,'code.py'); await ready(page);
   const currentURL = page.url();
@@ -131,7 +140,9 @@ test('navigation failure: Back keeps the current file and address until edits ar
 
 test('navigation during a slow save: repeated Back keeps unsaved text in its file', async ({page,appURL,workspace}) => {
   await page.goto(appURL); await ready(page);
+  await revealFiles(page);
   await page.getByRole('link',{name:'notes.txt',exact:true}).click(); await fileIs(page,'notes.txt'); await ready(page);
+  await revealFiles(page);
   await page.getByRole('link',{name:'code.py',exact:true}).click(); await fileIs(page,'code.py'); await ready(page);
   const currentURL = page.url();
   let release!: () => void;
@@ -158,6 +169,7 @@ test('repeated writing and coding: switching, external changes, and reopening pr
   const expected = new Map<string,string>();
   for(let round=0;round<6;round++) {
     for(const file of files) {
+      await revealFiles(page);
       await page.getByRole('link',{name:file,exact:true}).click(); await fileIs(page,file); await ready(page);
       if(expected.has(file)) expect(await documentText(page)).toBe(expected.get(file));
       const contents = `${file}: revision ${round}\n\nNotes: café, 😀, 漢字\n`;
@@ -171,6 +183,7 @@ test('repeated writing and coding: switching, external changes, and reopening pr
   expected.set('reading.md','Updated by an external tool\n');
   await page.reload(); await ready(page);
   for(const file of files) {
+    await revealFiles(page);
     await page.getByRole('link',{name:file,exact:true}).click(); await fileIs(page,file); await ready(page);
     expect(await documentText(page)).toBe(expected.get(file));
   }

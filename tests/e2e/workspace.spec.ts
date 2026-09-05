@@ -1,4 +1,4 @@
-import { test, expect, editor, documentText, fileIs, saved } from './fixtures';
+import { revealFiles, revealPreview, test, expect, editor, documentText, fileIs, saved } from './fixtures';
 import { readFile, writeFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -15,6 +15,7 @@ test('autosave reaches disk and survives reload', async ({ page, workspace }) =>
 
 test('immediate subproject navigation saves first', async ({ page, workspace }) => {
   await editor(page).fill('Before switching\n');
+  await revealFiles(page);
   await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
   await expect(page).toHaveURL(/jade=inner/);
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('Before switching\n');
@@ -24,10 +25,12 @@ test('immediate subproject navigation saves first', async ({ page, workspace }) 
 
 test('undo history stays with its file', async ({ page }) => {
   await editor(page).fill('Changed note\n');
+  await revealFiles(page);
   await page.getByRole('link', { name: 'code.py', exact: true }).click();
   await fileIs(page, 'code.py');
   await editor(page).press('ControlOrMeta+z');
   expect(await documentText(page)).toBe('print("hello")\n');
+  await revealFiles(page);
   await page.getByRole('link', { name: 'notes.txt', exact: true }).click();
   await fileIs(page, 'notes.txt');
   await editor(page).press('ControlOrMeta+z');
@@ -37,6 +40,7 @@ test('undo history stays with its file', async ({ page }) => {
 test('failed save blocks navigation and can be retried', async ({ page, workspace }) => {
   await page.route('**/save', route => route.fulfill({ status: 503, body: 'Temporary write failure' }));
   await editor(page).fill('Keep this edit\n');
+  await revealFiles(page);
   await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
   await expect(page.locator('#save-status')).toContainText('Not saved');
   await fileIs(page, 'notes.txt');
@@ -119,6 +123,7 @@ test('edits during a save are included before navigation completes', async ({ pa
   await reached;
   await editor(page).fill('Newer snapshot\n');
   release();
+  await revealFiles(page);
   await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
   await expect(page).toHaveURL(/jade=inner/);
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('Newer snapshot\n');
@@ -126,16 +131,20 @@ test('edits during a save are included before navigation completes', async ({ pa
 });
 
 test('file creation, cancellation, and refresh use local files', async ({ page, workspace }) => {
+  await revealFiles(page);
   await page.getByRole('button', { name: 'New file', exact: true }).click();
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.locator('#new-file-dialog')).not.toBeVisible();
+  await revealFiles(page);
   await page.getByRole('button', { name: 'New file', exact: true }).click();
   await page.getByRole('textbox', { name: 'New file path' }).fill('notes/with spaces.md');
   await page.getByRole('button', { name: 'Create file', exact: true }).click();
   await fileIs(page, 'notes/with spaces.md');
   expect(await readFile(join(workspace, 'notes/with spaces.md'), 'utf8')).toBe('');
   await writeFile(join(workspace, 'agent-added.txt'), 'new file');
-  await page.getByRole('button', { name: 'Refresh files', exact: true }).click();
+  await revealFiles(page);
+  await Promise.all([page.waitForEvent('load'), page.getByRole('button', { name: 'Refresh files', exact: true }).click()]);
+  await revealFiles(page);
   await expect(page.getByRole('link', { name: 'agent-added.txt', exact: true })).toBeVisible();
 });
 
@@ -158,6 +167,7 @@ test('local SVG plots render inside the sandboxed Markdown preview', async ({ pa
   await writeFile(join(workspace, 'plot.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#50dfbd"/></svg>');
   await writeFile(join(workspace, 'jade.md'), '# Plot workspace\n\n![Measured plot](plot.svg)\n');
   await page.goto(appURL);
+  await revealPreview(page);
   const plot = page.frameLocator('#view-frame').getByRole('img', { name: 'Measured plot' });
   await expect(plot).toBeVisible();
   await expect.poll(() => plot.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(200);
