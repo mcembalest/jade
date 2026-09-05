@@ -15,8 +15,33 @@
 | [web/terminal.ts](web/terminal.ts) | Terminal controls |
 | [web/build.mjs](web/build.mjs) | Frontend build → `web/dist/` |
 
+## Development
+
+Run from the repository root. Development requires Node and Go; installation requires Go only.
+
 ```sh
-go test ./...
+npm ci
+npm run test:setup
+npm test
 ```
 
-[Installation and browser tests](../README.md)
+| Command | Action |
+| --- | --- |
+| `npm run build` | TypeScript check and frontend build |
+| `npm test` | Build, Go race tests, Chromium and WebKit regression tests |
+| `npm run test:report` | Open the browser test report |
+| `npm run test:measure` | Informational latency measurements |
+| `go run ./cmd/jade --no-open .` | Start without opening a browser |
+| `npx playwright test tests/e2e/visual.spec.ts --update-snapshots` | Refresh visual baselines |
+
+Commit rebuilt `web/dist/` assets and visually reviewed screenshot baselines with source changes.
+Visual baselines: macOS · Chromium + WebKit · 2× density · 390–1440 px.
+
+Measurements: 50 KB / 500 KB / 4.5 MB; opening, input-to-render, search; three trials per target.
+Results: `.tmp/measurements/**/measurements.json`. Timings are machine-dependent.
+
+Not covered: OS clipboard integration, native IME, screen readers. Automated Sublime/Cursor/Obsidian comparisons are deferred.
+
+Search: case-insensitive literal matching within the current workspace; editable text only; up to 100 results, 32 MB of contents, and two seconds. Partial results are labeled.
+
+[Installation](../jade.md)
