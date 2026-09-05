@@ -4,7 +4,7 @@ JaDE (Just a Development Environment) is for thinking, working, coding, visualiz
 
 ## Install
 
-JaDE currently targets macOS. The browser editor and Go engine are bundled into one executable; running it needs no Node, Swift, uv, or separate app installation.
+JaDE currently targets macOS. The browser editor and Go engine are bundled into one executable; running it needs no Node or separate app installation.
 
 With Go installed:
 
@@ -25,17 +25,6 @@ brew install --HEAD mcembalest/jade/jade
 These install the current development branch; there is no tagged stable release yet.
 
 `jade` opens the current folder in your browser. It listens only on loopback, chooses an available port, and keeps running in the launching terminal. Save your edits before stopping it with Ctrl+C. Use `jade --no-open [folder]` to print the address without opening a browser, or `--address 127.0.0.1:7333` for a fixed port. `jade.md` is optional.
-
-### Optional Mac window
-
-From a checkout, with Go, uv, and Apple Command Line Tools installed:
-
-```sh
-uv run native/install.py
-jade --native /path/to/project
-```
-
-The optional app supplies a native window and menu-bar folder picker. Its close, quit, and workspace-switch actions wait for a successful save.
 
 ## Editing
 
@@ -70,7 +59,7 @@ npm test
 
 This builds the bundled editor, runs Go's race-enabled tests, and drives a headless browser against fresh temporary workspace copies. Editing mechanics run against both JaDE and a minimal CodeMirror baseline pinned by the lockfile. JaDE-specific checks cover saving, navigation, external changes, conflict recovery, line endings, file creation, and the minimum window layout. No installed desktop editors, personal files, external services, or desktop keystrokes are involved.
 
-On failure, screenshots, videos, browser traces, and engine logs are kept under `.tmp/test-results`. Run `npm run test:report` for the HTML report. The suite checks the browser-side flush contract; native macOS window controls still require a separate native integration check. It does not claim crash recovery or Sublime/Obsidian feature parity.
+On failure, screenshots, videos, browser traces, and engine logs are kept under `.tmp/test-results`. Run `npm run test:report` for the HTML report. It does not claim crash recovery or Sublime/Obsidian feature parity.
 
 Frontend sources live in `engine/web`. Commit the generated `editor.bundle.js` and third-party notices after frontend changes so `go install` works without a JavaScript build step. Runtime assets are served locally; dependency licenses are available at `/licenses.txt`.
 
@@ -92,7 +81,7 @@ repository/
     └── work
 ```
 
-Each inner JaDE owns its working directory. The Go engine handles files, terminal launching, and the local HTTP interface; your browser or the optional native macOS shell hosts that interface. There are no embedded terminal dependencies.
+Each inner JaDE owns its working directory. The Go engine handles files, terminal launching, and the local HTTP interface; your browser hosts that interface. There are no embedded terminal dependencies.
 
 The header’s terminal dropdown lists installed apps (including Terminal and Ghostty). **Open terminal** (⌘J) opens the selected app at the active workspace directory. The choice is saved across app restarts and workspaces. Without a saved choice, JaDE detects an installed alternative, or uses Terminal. `JADE_TERMINAL` overrides the choice with an app name or path, such as `Ghostty` or `/Applications/Ghostty.app`; it is never interpreted as a shell command. If launching the selected app fails, JaDE falls back to macOS Terminal.
 

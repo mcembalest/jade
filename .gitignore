@@ -2,7 +2,5 @@
 /jade
 sessions.md
 /.tmp/
-/native/.build/
-/native/.deps/
 
 /node_modules/

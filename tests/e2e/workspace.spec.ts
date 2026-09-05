@@ -42,8 +42,6 @@ test('failed save blocks navigation and can be retried', async ({ page, workspac
   await fileIs(page, 'notes.txt');
   expect(await documentText(page)).toBe('Keep this edit\n');
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe(note);
-  // This is the same contract the optional Mac shell calls before closing.
-  expect(await page.evaluate(() => (window as any).__jadeFlush())).toBe(false);
   await page.unroute('**/save');
   await editor(page).press('ControlOrMeta+s');
   await saved(page);
@@ -107,7 +105,7 @@ for (const [name, ending] of [['LF', '\n'], ['CRLF', '\r\n']]) {
   });
 }
 
-test('edits during a save are included before flush completes', async ({ page, workspace }) => {
+test('edits during a save are included before navigation completes', async ({ page, workspace }) => {
   let release!: () => void, started!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
   const reached = new Promise<void>(resolve => { started = resolve; });
@@ -121,7 +119,8 @@ test('edits during a save are included before flush completes', async ({ page, w
   await reached;
   await editor(page).fill('Newer snapshot\n');
   release();
-  expect(await page.evaluate(() => (window as any).__jadeFlush())).toBe(true);
+  await page.locator('a[href="/?jade=inner&file=jade.md"]').click();
+  await expect(page).toHaveURL(/jade=inner/);
   expect(await readFile(join(workspace, 'notes.txt'), 'utf8')).toBe('Newer snapshot\n');
   await saved(page);
 });
@@ -140,7 +139,7 @@ test('file creation, cancellation, and refresh use local files', async ({ page, 
   await expect(page.getByRole('link', { name: 'agent-added.txt', exact: true })).toBeVisible();
 });
 
-test('error controls fit the minimum native window width', async ({ page }) => {
+test('error controls fit the minimum supported window width', async ({ page }) => {
   await page.setViewportSize({ width: 760, height: 520 });
   await page.route('**/save', route => route.fulfill({ status: 503, body: 'Cannot save here. Check the file and folder permissions, then try saving again.' }));
   await editor(page).fill('Unsaved');

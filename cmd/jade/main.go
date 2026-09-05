@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -16,7 +15,6 @@ import (
 )
 
 func main() {
-	native := flag.Bool("native", false, "open the optional JaDE.app instead of the browser")
 	noOpen := flag.Bool("no-open", false, "serve without opening a browser")
 	address := flag.String("address", "127.0.0.1:0", "HTTP loopback listen address")
 	flag.Usage = func() {
@@ -35,23 +33,6 @@ func main() {
 	root, err := engine.ResolveWorkspaceRoot(path)
 	if err != nil {
 		log.Fatal(err)
-	}
-	if *native {
-		if runtime.GOOS != "darwin" {
-			log.Fatal("--native requires macOS")
-		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		application := filepath.Join(home, "Applications", "JaDE.app")
-		if _, err := os.Stat(application); err != nil {
-			log.Fatal("JaDE.app is not installed. Run jade without --native to use the browser.")
-		}
-		if err := exec.Command("/usr/bin/open", "-a", application, root).Run(); err != nil {
-			log.Fatal(err)
-		}
-		return
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -128,11 +128,6 @@ async function leave(action) {
   catch (error) { report(error.message, true); }
   finally { moving = false; freeze(false); }
 }
-window.__jadeFlush = async () => {
-  if (moving) return false;
-  moving = true; freeze(true);
-  try { return await save(); } finally { moving = false; freeze(false); }
-};
 function showFile(data, href, link) {
   sessions.set(active.file, {state:editor.state, revision:active.revision, scroll:editor.scrollDOM.scrollTop});
   const cached = sessions.get(data.selected);

@@ -10,7 +10,7 @@ import (
 )
 
 // Serve binds a loopback listener before reporting readiness. A zero port lets
-// the OS choose a free port. Both the CLI and optional native shell use this path.
+// the OS choose a free port. The jade command uses this for browser and headless runs.
 func Serve(ctx context.Context, root, address string, ready func(string)) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
