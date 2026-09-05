@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-web.mjs"
+    "build": "node scripts/build-web.mjs",
+    "test": "npm run build && go test -race ./... && playwright test",
+    "test:setup": "playwright install chromium",
+    "test:report": "playwright show-report .tmp/test-report"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.0",
@@ -16,6 +19,7 @@
     "codemirror": "6.0.2"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "esbuild": "0.28.2"
   }
 }

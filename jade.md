@@ -54,6 +54,24 @@ go test -race ./...
 go run ./cmd/jade --no-open .
 ```
 
+### Automated local checks
+
+One-time browser-test setup after `npm ci`:
+
+```sh
+npm run test:setup
+```
+
+Then run everything with:
+
+```sh
+npm test
+```
+
+This builds the bundled editor, runs Go's race-enabled tests, and drives a headless browser against fresh temporary workspace copies. Editing mechanics run against both JaDE and a minimal CodeMirror baseline pinned by the lockfile. JaDE-specific checks cover saving, navigation, external changes, conflict recovery, line endings, file creation, and the minimum window layout. No installed desktop editors, personal files, external services, or desktop keystrokes are involved.
+
+On failure, screenshots, videos, browser traces, and engine logs are kept under `.tmp/test-results`. Run `npm run test:report` for the HTML report. The suite checks the browser-side flush contract; native macOS window controls still require a separate native integration check. It does not claim crash recovery or Sublime/Obsidian feature parity.
+
 Frontend sources live in `engine/web`. Commit the generated `editor.bundle.js` and third-party notices after frontend changes so `go install` works without a JavaScript build step. Runtime assets are served locally; dependency licenses are available at `/licenses.txt`.
 
 ## Design idea
