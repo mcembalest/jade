@@ -12,6 +12,7 @@ await build({
 const routes = new Map([
   ["/", ["index.html", "text/html"]],
   ["/app.js", ["dist/app.js", "text/javascript"]],
+  ["/comparison.json", ["../data/comparison.json", "application/json"]],
   ...[
     "train-images-idx3-ubyte",
     "train-labels-idx1-ubyte",
@@ -35,6 +36,8 @@ export const server = createServer(async (req, res) => {
         "Content-Type": route[1],
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "no-store",
+        "Cross-Origin-Opener-Policy": "same-origin",
+        "Cross-Origin-Embedder-Policy": "require-corp",
       })
       .end(body);
   } catch {

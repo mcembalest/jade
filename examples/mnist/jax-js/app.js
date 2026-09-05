@@ -401,3 +401,136 @@ try {
 } catch (e) {
   $("error").textContent = String(e);
 }
+
+// The comparison runner supplies the same weights and sample order as Python.
+export async function compare(backend, trials = 3) {
+  defaultDevice(backend);
+  const response = await fetch("/comparison.json");
+  if (!response.ok)
+    throw Error(
+      "Run ../compare.py with NumPy first to create the shared fixture.",
+    );
+  const shared = await response.json();
+  const d = await load();
+  const flatX = Float32Array.from(d.x.slice(0, 7840000), (v) => v / 255);
+  const testX = Float32Array.from(d.tx.slice(0, 784000), (v) => v / 255);
+  const batches = shared.orders.flatMap((order) =>
+    Array.from({ length: 79 }, (_, b) => {
+      const indices = order.slice(b * 128, (b + 1) * 128),
+        x = new Float32Array(indices.length * 784);
+      indices.forEach((n, i) =>
+        x.set(flatX.subarray(n * 784, (n + 1) * 784), i * 784),
+      );
+      return [x, Int32Array.from(indices, (n) => d.y[n])];
+    }),
+  );
+  let w, solver, state;
+  const reset = async () => {
+    tree.dispose(w);
+    tree.dispose(state);
+    w = Object.fromEntries(
+      Object.entries(shared.weights).map(([k, v]) => [k, np.array(v)]),
+    );
+    solver = adam(0.001, { b1: 0.9, b2: 0.999, eps: 1e-8 });
+    state = solver.init(tree.ref(w));
+    await blockUntilReady([w, state]);
+  };
+  // Optax 0.1.2 reads its step counter on the host; compile the gradient only.
+  const gradient = jit(valueAndGrad(loss));
+  const step = async ([xb, yb]) => {
+    const [value, g] = gradient(
+      tree.ref(w),
+      np.array(xb).reshape([-1, 784]),
+      np.array(yb, { dtype: np.int32 }),
+    );
+    let updates;
+    [updates, state] = solver.update(g, state);
+    w = applyUpdates(w, updates);
+    await blockUntilReady([w, state, value]);
+    value.dispose();
+  };
+  const result = {
+    ...metadata(),
+    backend: "jax-js",
+    device: backend,
+    training_seconds: [],
+    epoch_seconds: [],
+    accuracy: [],
+    inference: [],
+  };
+  const setup = performance.now();
+  await reset();
+  result.setup_seconds = (performance.now() - setup) / 1000;
+  const check = async (expected) => {
+    const actual = await predict(
+      tree.ref(w),
+      np.array(testX.slice(0, 128 * 784)).reshape([128, 784]),
+    ).jsAsync();
+    let error = 0;
+    for (let i = 0; i < 128; i++)
+      for (let j = 0; j < 10; j++) {
+        const delta = Math.abs(actual[i][j] - expected[i][j]);
+        error = Math.max(error, delta);
+        if (
+          !Number.isFinite(delta) ||
+          delta > 3e-4 + 3e-4 * Math.abs(expected[i][j])
+        )
+          throw Error("Shared numerical check failed: " + delta);
+      }
+    return error;
+  };
+  result.initial_error = await check(shared.initial_logits);
+  const first = performance.now();
+  await step(batches[0]);
+  result.first_train_step_ms = performance.now() - first;
+  result.first_update_error = await check(shared.first_update_logits);
+  await step(batches[78]);
+  try {
+    for (let trial = 0; trial < trials; trial++) {
+      await reset();
+      const epochs = [];
+      for (let epoch = 0; epoch < 3; epoch++) {
+        const start = performance.now();
+        for (const batch of batches.slice(epoch * 79, (epoch + 1) * 79))
+          await step(batch);
+        epochs.push((performance.now() - start) / 1000);
+      }
+      const score = await accuracy(w);
+      if (score < 0.85) throw Error("Training sanity check failed: " + score);
+      result.epoch_seconds.push(epochs);
+      result.training_seconds.push(epochs.reduce((a, b) => a + b, 0));
+      result.accuracy.push(score);
+    }
+    await reset();
+    result.reference_max_abs_error = await verifyForward(w);
+    for (const size of [1, 128, 1000]) {
+      const input = np.array(testX.slice(0, size * 784)).reshape([size, 784]);
+      await blockUntilReady(input);
+      const once = async () => {
+        const start = performance.now(),
+          out = predict(tree.ref(w), input.ref);
+        await blockUntilReady(out);
+        const elapsed = performance.now() - start;
+        out.dispose();
+        return elapsed;
+      };
+      const first_ms = await once();
+      for (let i = 0; i < 5; i++) await once();
+      const samples = [];
+      for (let i = 0; i < 50; i++) samples.push(await once());
+      const sorted = [...samples].sort((a, b) => a - b);
+      result.inference.push({
+        batch: size,
+        first_ms,
+        median_ms: (sorted[24] + sorted[25]) / 2,
+        p95_ms: sorted[46] + 0.55 * (sorted[47] - sorted[46]),
+        samples_ms: samples,
+      });
+      input.dispose();
+    }
+    return result;
+  } finally {
+    tree.dispose(w);
+    tree.dispose(state);
+  }
+}

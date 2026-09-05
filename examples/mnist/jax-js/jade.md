@@ -1,38 +1,50 @@
-# MNIST, in the browser
+# jax-js
 
-Train a small neural network locally with [jax-js](https://github.com/ekzhang/jax-js), then keep the weights and measure inference. Choose **WebGPU** for the GPU or **WebAssembly** for the CPU. The page shows which backends your browser supports; it never silently changes your choice.
+![Browser training latency and inference throughput](learning.svg)
 
-![Learning and inference in the browser](learning.svg)
+| Implementation | Setting |
+| --- | --- |
+| Framework | jax-js 0.1.24 + Optax 0.1.2 |
+| Execution | WebAssembly or WebGPU; compiled forward/gradient; eager Optax updates |
+| Model, optimizer, timing | [Shared protocol](../jade.md#protocol) |
+| App + comparison | [app.js](app.js) |
+| Automated runner | [compare.mjs](compare.mjs) |
+| Results | [measurements.json](../measurements.json): `jax-js-wasm`, `jax-js-webgpu` |
 
-## Run
+## Comparison
 
-From this folder, with Node.js 22+ installed:
+From this folder, with Node.js 22+, Chrome, and `uv`:
 
 ```sh
 ../fetch.sh
+uv run --script --locked ../compare.py --backend numpy
 npm ci
+npx playwright install chromium
+CHROME_CHANNEL=chrome node compare.mjs
+```
+
+The command requests both backends explicitly in installed headless Chrome. Missing WebGPU fails the run; there is no CPU fallback. `node compare.mjs` uses bundled Chromium; WebGPU availability depends on that build. Shared initialization and sample order come from `../data/comparison.json`; both forward logits and the first Adam update are checked against NumPy. Raw results: `../results/jax-js-{wasm,webgpu}.json`.
+
+## Interactive app
+
+```sh
 npm start
 ```
 
-Open the printed local URL. **Train from scratch** runs a 784 → 128 → 10 ReLU MLP with Adam (0.001), batch 128, seed 0, three epochs on the first 10,000 training digits. Evaluation uses the first 1,000 test digits. **Save weights** exports JSON; **Reload weights** restores it in a fresh page without retraining. **Measure inference** compares six batch sizes and **Save measurements** keeps the run's numbers.
+Open the printed local URL. Train, save/reload weights, measure inference, and export measurements. Computation stays in the browser; the server serves local files.
 
-Training and inference run entirely in your browser. The small server only serves the page and four local MNIST files. The interactive experiment opens separately from JaDE's document preview.
+The interactive app uses its own random initialization and sample order. Its training timer includes batch gathering and first-use compilation. Its exported measurements are separate from the controlled comparison above.
 
-## What the numbers mean
-
-Training time includes batch gathering, automatic differentiation, Adam, synchronization and first-use compilation. It excludes loading, initialization, shuffling, evaluation and chart rendering. Browser/GPU driver caches can already be warm. Warm inference medians follow five warmups and 20 synchronized calls, with weights and input resident; transfers and result readback are excluded. “First timed call” may already follow evaluation at the same shape. Browser timer resolution limits very short measurements.
-
-The architecture matches the MLX/MAX examples, but random initialization and shuffling use different generators. These are reproducible local experiments, not a controlled framework speed ranking.
-
-## Repeatable checks
+## App checks
 
 ```sh
-npx playwright install chromium
 npm test
-# Full run in installed Chrome, explicitly requesting WebGPU:
-CHROME_CHANNEL=chrome BACKEND=webgpu TRAIN=10000 EPOCHS=3 npm test
 ```
 
-The short default test uses WebAssembly and 512 training digits. It trains through the real UI, checks falling loss, measures all six batch sizes, exports weights, reloads the page, and confirms identical test accuracy after import. It also checks device logits against an independent scalar JavaScript implementation, and verifies that malformed weights leave the model intact. Measurements and a screenshot are written to ignored `results/`.
+Headless UI checks: training, falling loss, inference, weight export/import, scalar-reference logits, malformed-checkpoint rejection. Default: WASM, 512 training images. Outputs: ignored `results/`.
 
-The checked-in [measurements](measurements.json) come from the full WebGPU run. Rebuild every chart with `uv run --script --locked ../plot.py`; no training or data download is required.
+## Chart
+
+```sh
+uv run --script --locked ../plot.py
+```
