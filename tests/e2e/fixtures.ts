@@ -8,7 +8,7 @@ import { once } from 'node:events';
 
 type App = { url: string; restart: (signal?: NodeJS.Signals) => Promise<string> };
 
-export const test = base.extend<{ workspace: string; app: App; appURL: string; baselineURL: string }>({
+export const test = base.extend<{ workspace: string; app: App; appURL: string; baselineURL: string; expectedPageErrors: string[] }>({
   workspace: async ({}, use) => {
     const directory = await mkdtemp(join(tmpdir(), 'jade-e2e-'));
     const workspace = join(directory, 'workspace');
@@ -74,12 +74,13 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
     try { await use(`http://127.0.0.1:${address.port}`); }
     finally { server.closeAllConnections(); await new Promise<void>(done => server.close(() => done())); }
   },
-  page: async ({ page }, use, testInfo) => {
+  expectedPageErrors: async ({}, use) => { await use([]); },
+  page: async ({ page, expectedPageErrors }, use, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await use(page);
     if (errors.length) await testInfo.attach('browser-errors.json', { body: JSON.stringify(errors), contentType: 'application/json' });
-    expect(errors).toEqual([]);
+    expect(errors).toEqual(expectedPageErrors);
   },
 });
 

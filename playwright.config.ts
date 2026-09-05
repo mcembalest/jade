@@ -3,6 +3,10 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
+  projects: [
+    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'webkit', use: { browserName: 'webkit' } },
+  ],
   workers: 2,
   timeout: 20_000,
   expect: { timeout: 5_000 },
@@ -11,7 +15,6 @@ export default defineConfig({
   outputDir: '.tmp/test-results',
   reporter: [['list'], ['html', { outputFolder: '.tmp/test-report', open: 'never' }]],
   use: {
-    browserName: 'chromium',
     headless: true,
     viewport: { width: 1240, height: 820 },
     screenshot: 'only-on-failure',

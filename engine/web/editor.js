@@ -13,6 +13,30 @@ const form = document.querySelector('#editor-form');
 const status = document.querySelector('#save-status');
 const reloadButton = document.querySelector('#reload-file');
 const copyButton = document.querySelector('#save-copy');
+const saveButton = document.querySelector('#save-now');
+const previewButton = document.querySelector('#preview-toggle');
+const compact = matchMedia('(max-width:700px)');
+let previewOpen = !compact.matches;
+const filesButton = document.querySelector('#files-toggle');
+function showFiles(open) {
+  const explorer = document.querySelector('#file-explorer');
+  if (!open && explorer.contains(document.activeElement)) filesButton.focus();
+  explorer.hidden = !open;
+  document.querySelector('#shell').classList.toggle('files-hidden', !open);
+  filesButton.setAttribute('aria-expanded', String(open));
+}
+filesButton.addEventListener('click', () => showFiles(filesButton.getAttribute('aria-expanded') !== 'true'));
+showFiles(!compact.matches);
+compact.addEventListener('change', () => showFiles(!compact.matches));
+function showPreview() {
+  const visible = !previewButton.hidden && previewOpen;
+  document.querySelector('#document').classList.toggle('jade-open', visible);
+  document.querySelector('#resolved').hidden = !visible;
+  previewButton.setAttribute('aria-pressed', String(visible));
+  previewButton.textContent = visible ? 'Hide preview' : 'Show preview';
+}
+previewButton.addEventListener('click', () => { previewOpen = !previewOpen; showPreview(); });
+showPreview();
 const viewFrame = document.querySelector('#view-frame');
 const readOnly = new Compartment();
 const sessions = new Map();
@@ -64,6 +88,7 @@ function renderDrafts() {
   draftPanel.hidden = availableDrafts.length === 0;
 }
 async function loadDrafts() {
+  backupStatus.textContent = '';
   availableDrafts = []; renderDrafts();
   loadingDrafts = true; freeze(true); body.dataset.draftsReady = 'false';
   try {
@@ -86,6 +111,8 @@ const cacheKey = file => 'jade-position:' + body.dataset.jade + ':' + file;
 
 function report(message, problem = false) {
   status.textContent = message;
+  status.parentElement.dataset.problem = String(problem);
+  saveButton.hidden = !problem || conflict;
   copyButton.hidden = !problem;
   reloadButton.hidden = !problem;
 }
@@ -107,7 +134,7 @@ function makeState(contents, file) {
   return EditorState.create({doc:contents, selection:{anchor:head}, extensions:[
     basicSetup, language(file), keymap.of([indentWithTab]), EditorView.lineWrapping,
     EditorState.lineSeparator.of(contents.includes('\r\n') ? '\r\n' : '\n'),
-    EditorView.contentAttributes.of({'aria-label':'Editor', spellcheck:'false'}),
+    EditorView.contentAttributes.of({'aria-label':'Editor', 'aria-description':'Press Escape then Tab to move focus out of the editor.', spellcheck:'false'}),
     readOnly.of([EditorState.readOnly.of(!file), EditorView.editable.of(!!file)]),
     EditorView.theme({
       '&':{height:'100%',fontSize:'13px'}, '.cm-scroller':{overflow:'auto',fontFamily:'ui-monospace, SFMono-Regular, Menlo, monospace'},
@@ -144,15 +171,21 @@ async function request(url, options) {
 function fileURL(file = active.file) {
   const url = new URL('/file', location.origin);
   url.searchParams.set('jade', body.dataset.jade); url.searchParams.set('file', file);
+  const view = new URL(location.href).searchParams.get('view');
+  if (file === active.file && view) url.searchParams.set('view', view);
   return url;
 }
 function refreshPreview(data) {
+  document.querySelector('.project').textContent = data.title;
+  document.querySelector('.project').title = data.title;
+  document.title = data.title + ' · JaDE';
   const visible = data.isJade;
-  document.querySelector('#document').classList.toggle('jade-open', visible);
-  document.querySelector('#resolved').hidden = !visible;
+  previewButton.hidden = !visible;
+  showPreview();
   if (visible) {
     viewFrame.src = data.viewURL;
-    document.querySelector('#view-name').textContent = data.view || data.title;
+    document.querySelector('#view-name').textContent = data.view ? 'Preview · ' + data.view : 'Preview';
+    document.querySelector('#view-name').title = data.view || data.title;
   }
 }
 async function save() {
@@ -187,7 +220,7 @@ async function save() {
       return false;
     }
   })();
-  try { return await saving; } finally { saving = null; }
+  try { return await saving; } finally { saving = null; checkDisk(); }
 }
 async function leave(action) {
   if (moving || loadingDrafts) return;
@@ -204,10 +237,14 @@ async function showFile(data, href, link) {
   editor.setState(cached?.revision === data.revision ? cached.state : makeState(data.contents, data.selected));
   editor.scrollDOM.scrollTop = cached?.revision === data.revision ? cached.scroll : position(data.selected).scroll || 0;
   body.dataset.file = data.selected;
-  document.querySelector('#file-name').textContent = data.selected;
+  document.querySelector('#file-name').textContent = data.selected || 'No file selected';
+  document.querySelector('#file-name').title = data.selected;
+  document.querySelector('#empty-editor').hidden = !!data.selected;
   document.querySelectorAll('.file-link').forEach(node => node.classList.toggle('active', node === link));
   if (href) history.pushState({}, '', href);
-  refreshPreview(data); report('Saved'); await loadDrafts(); editor.focus();
+  refreshPreview(data); report('Saved'); await loadDrafts();
+  if (compact.matches) showFiles(false);
+  editor.focus();
 }
 document.querySelector('#workspace-root')?.addEventListener('click', event => {
   event.preventDefault(); leave(async () => { location.href = '/'; });
@@ -218,8 +255,9 @@ document.querySelectorAll('.file-link').forEach(link => {
     event.preventDefault();
     leave(async () => {
       if (link.dataset.jade !== body.dataset.jade) { location.href = link.href; return; }
-      if (link.dataset.file === active.file) return;
-      const data = await (await request(fileURL(link.dataset.file))).json();
+      if (link.dataset.file === active.file && !new URL(location.href).searchParams.has('view')) return;
+      const url = fileURL(link.dataset.file); url.searchParams.delete('view');
+      const data = await (await request(url)).json();
       await showFile(data, link.href, link);
     });
   });
@@ -244,6 +282,7 @@ reloadButton.addEventListener('click', () => {
     refreshPreview(data); report('Reloaded from disk');
   }).catch(error => report(error.message, true)).finally(() => { moving = false; freeze(false); });
 });
+saveButton.addEventListener('click', save);
 copyButton.addEventListener('click', () => download(text()));
 document.querySelector('#download-draft').addEventListener('click', () => {
   const draft = availableDrafts.find(item => item.id === draftSelect.value);
@@ -315,24 +354,39 @@ form.addEventListener('submit', event => { event.preventDefault(); save(); });
 document.querySelector('#refresh-files').addEventListener('click', () => leave(async () => location.reload()));
 const newFileDialog = document.querySelector('#new-file-dialog');
 const newFileForm = document.querySelector('#new-file-form');
+const newFileError = document.querySelector('#new-file-error');
+let creating = false;
 document.querySelector('#new-file').addEventListener('click', () => {
-  newFileForm.reset(); newFileDialog.showModal();
+  newFileForm.reset(); newFileError.textContent = '';
+  newFileForm.elements.path.removeAttribute('aria-invalid');
+  newFileDialog.showModal();
 });
+newFileDialog.addEventListener('close', () => document.querySelector('#new-file').focus());
 document.querySelector('#new-file-cancel').addEventListener('click', () => newFileDialog.close());
-newFileForm.addEventListener('submit', event => {
+newFileDialog.addEventListener('cancel', event => { if (creating) event.preventDefault(); });
+newFileForm.addEventListener('submit', async event => {
   event.preventDefault();
-  const path = new FormData(newFileForm).get('path').trim();
-  if (!path) return;
-  newFileDialog.close();
-  leave(async () => {
+  const path = newFileForm.elements.path.value.trim();
+  if (!path || creating || moving || loadingDrafts) return;
+  creating = moving = true; freeze(true); newFileError.textContent = '';
+  for (const control of newFileForm.elements) control.disabled = true;
+  try {
+    if (!await save()) throw new Error('Save or download your current edits before creating another file.');
     const data = new FormData(); data.set('jade', body.dataset.jade); data.set('path', path);
     const response = await request('/new', {method:'POST', body:data});
     location.href = await response.text();
-  });
+  } catch (error) {
+    newFileError.textContent = error.message;
+    newFileForm.elements.path.setAttribute('aria-invalid', 'true');
+  } finally {
+    creating = moving = false; freeze(false);
+    for (const control of newFileForm.elements) control.disabled = false;
+    if (newFileError.textContent) newFileForm.elements.path.focus();
+  }
 });
 const openTerminal = initTerminals(body, document.querySelector('#terminal-status'));
 addEventListener('keydown', event => {
   if (!(event.metaKey || event.ctrlKey)) return;
-  if (event.key.toLowerCase() === 's') { event.preventDefault(); save(); }
+  if (event.key.toLowerCase() === 's') { event.preventDefault(); if (!newFileDialog.open) save(); }
   if (event.key.toLowerCase() === 'j') { event.preventDefault(); openTerminal(); }
 });

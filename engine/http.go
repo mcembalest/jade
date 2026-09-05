@@ -99,7 +99,12 @@ func (a *app) guard(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(response, "cross-origin request rejected", http.StatusForbidden)
 			return
 		}
-		if site := request.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		// A link clicked in an opaque preview navigates the top-level document
+		// as cross-site. Only the read-only shell accepts that navigation;
+		// API requests and embedded documents still require the same origin.
+		shellNavigation := request.Method == http.MethodGet && request.URL.Path == "/" &&
+			request.Header.Get("Sec-Fetch-Mode") == "navigate" && request.Header.Get("Sec-Fetch-Dest") == "document"
+		if site := request.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" && !shellNavigation {
 			http.Error(response, "cross-site request rejected", http.StatusForbidden)
 			return
 		}
@@ -251,41 +256,17 @@ func (a *app) rewriteDestinations(jadePath string, document ast.Node) {
 		}
 		switch typed := node.(type) {
 		case *ast.Link:
+			if !bytes.HasPrefix(typed.Destination, []byte("#")) {
+				typed.SetAttributeString("target", []byte("_top"))
+			}
 			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, false)
+		case *ast.AutoLink:
+			typed.SetAttributeString("target", []byte("_top"))
 		case *ast.Image:
 			typed.Destination = a.rewriteDestination(jadePath, typed.Destination, true)
 		}
 		return ast.WalkContinue, nil
 	})
-}
-
-func (a *app) defaultView(workspace Workspace) string {
-	source := []byte(workspace.Markdown)
-	document := a.markdown.Parser().Parse(gmtext.NewReader(source))
-	view := ""
-	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
-		if !entering {
-			return ast.WalkContinue, nil
-		}
-		link, ok := node.(*ast.Link)
-		if !ok {
-			return ast.WalkContinue, nil
-		}
-		dest := string(link.Destination)
-		if externalDestination(dest) {
-			return ast.WalkContinue, nil
-		}
-		resolved, err := existingFile(a.root, workspace.Path, strings.TrimSuffix(dest, "/"))
-		if err != nil {
-			return ast.WalkContinue, nil
-		}
-		if info, statErr := os.Stat(resolved); statErr == nil && info.Mode().IsRegular() {
-			view = filepath.ToSlash(filepath.Clean(strings.TrimSuffix(dest, "/")))
-			return ast.WalkStop, nil
-		}
-		return ast.WalkContinue, nil
-	})
-	return view
 }
 
 func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageData, error) {
@@ -332,9 +313,6 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 			view = ""
 		}
 	}
-	if view == "" {
-		view = a.defaultView(workspace)
-	}
 	data.View = view
 	if view == "" {
 		data.ViewURL = "/front?jade=" + template.URLQueryEscaper(workspace.Path)
@@ -361,7 +339,7 @@ func (a *app) home(response http.ResponseWriter, request *http.Request) {
 	}
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'")
+	response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 	if err := a.page.Execute(response, data); err != nil {
 		log.Printf("render: %v", err)
 	}
@@ -464,7 +442,7 @@ func (a *app) renderMarkdown(response http.ResponseWriter, jadePath string, mark
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-store")
 	response.Header().Set("Content-Security-Policy", "sandbox allow-top-navigation-by-user-activation; default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'")
-	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><base target="_parent"><style>`+previewStyle+`</style>`)
+	_, _ = io.WriteString(response, `<!doctype html><meta charset="utf-8"><style>`+previewStyle+`</style>`)
 	_, _ = response.Write(rendered.Bytes())
 }
 

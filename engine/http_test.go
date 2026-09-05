@@ -78,7 +78,7 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 			t.Fatalf("page = %d, missing %q:\n%s", recorder.Code, expected, page)
 		}
 	}
-	for _, removed := range []string{`id="publish-open"`, `id="publish-dialog"`, `id="branch-select"`, "@xterm", `id="terminal-panel"`, "Run:", "sh command in this JaDE", ">Open</button>", ">Save</button>"} {
+	for _, removed := range []string{`id="publish-open"`, `id="publish-dialog"`, `id="branch-select"`, "@xterm", `id="terminal-panel"`, "Run:", "sh command in this JaDE", ">Open</button>"} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("obsolete control %q remains", removed)
 		}
@@ -109,9 +109,20 @@ func TestIDEShellAndJadeResolution(t *testing.T) {
 	if err := json.NewDecoder(recorder.Body).Decode(&file); err != nil {
 		t.Fatal(err)
 	}
-	if !file.IsJade || file.ViewURL != "/view?jade=.&file=out.txt" {
+	if !file.IsJade || file.ViewURL != "/front?jade=." {
 		t.Fatalf("jade.md response = %#v", file)
 	}
+	request = httptest.NewRequest(http.MethodGet, "/file?jade=.&file=jade.md&view=out.txt", nil)
+	request.Host = "127.0.0.1:7333"
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if err := json.NewDecoder(recorder.Body).Decode(&file); err != nil {
+		t.Fatal(err)
+	}
+	if file.ViewURL != "/view?jade=.&file=out.txt" {
+		t.Fatalf("explicit artifact view = %#v", file)
+	}
+
 }
 
 func TestPlainRepositoryOpensWithoutJadeMarker(t *testing.T) {
@@ -161,5 +172,39 @@ func TestSaveAndCreateUsePlainFiles(t *testing.T) {
 	}
 	if _, err = os.Stat(filepath.Join(application.root, "notes", "new.md")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCrossSiteNavigationOnlyOpensShell(t *testing.T) {
+	handler := testApp(t).handler()
+	for _, tc := range []struct {
+		name, method, path, mode, destination, origin, host string
+		want                                                int
+	}{
+		{"preview link", "GET", "/", "navigate", "document", "", "127.0.0.1:7333", 200},
+		{"embedded shell", "GET", "/", "navigate", "iframe", "", "127.0.0.1:7333", 403},
+		{"shell fetch", "GET", "/", "cors", "empty", "", "127.0.0.1:7333", 403},
+		{"file navigation", "GET", "/file", "navigate", "document", "", "127.0.0.1:7333", 403},
+		{"draft navigation", "GET", "/drafts", "navigate", "document", "", "127.0.0.1:7333", 403},
+		{"post navigation", "POST", "/save", "navigate", "document", "", "127.0.0.1:7333", 403},
+		{"foreign origin", "GET", "/", "navigate", "document", "https://evil.example", "127.0.0.1:7333", 403},
+		{"rebound host", "GET", "/", "navigate", "document", "", "evil.example:7333", 403},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(tc.method, tc.path, nil)
+			request.Host = tc.host
+			request.Header.Set("Sec-Fetch-Site", "cross-site")
+			request.Header.Set("Sec-Fetch-Mode", tc.mode)
+			request.Header.Set("Sec-Fetch-Dest", tc.destination)
+			request.Header.Set("Origin", tc.origin)
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, request)
+			if response.Code != tc.want {
+				t.Fatalf("status = %d, want %d", response.Code, tc.want)
+			}
+			if tc.want == 200 && !strings.Contains(response.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+				t.Fatal("shell must not be embedded by another page")
+			}
+		})
 	}
 }

@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node engine/web/build.mjs",
     "test": "npm run build && go test -race ./... && playwright test",
-    "test:setup": "playwright install chromium",
+    "test:setup": "playwright install chromium webkit",
     "test:report": "playwright show-report .tmp/test-report"
   },
   "dependencies": {
