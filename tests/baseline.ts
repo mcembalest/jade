@@ -3,7 +3,8 @@ import { basicSetup } from 'codemirror';
 import { EditorView, keymap } from '@codemirror/view';
 import { indentWithTab } from '@codemirror/commands';
 
-new EditorView({
+fetch('/document').then(response => response.text()).then(doc => new EditorView({
+  doc,
   parent: document.querySelector('#editor')!,
-  extensions: [basicSetup, keymap.of([indentWithTab]), EditorView.contentAttributes.of({'aria-label':'Editor'})],
-});
+  extensions: [basicSetup, EditorView.lineWrapping, EditorView.theme({'&':{height:'700px',fontSize:'13px'},'.cm-scroller':{overflow:'auto'}}), keymap.of([indentWithTab]), EditorView.contentAttributes.of({'aria-label':'Editor'})],
+}));

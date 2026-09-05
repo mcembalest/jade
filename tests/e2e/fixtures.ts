@@ -61,9 +61,13 @@ export const test = base.extend<{ workspace: string; app: App; appURL: string; b
     }
   },
   appURL: async ({ app }, use) => { await use(app.url); },
-  baselineURL: async ({}, use) => {
+  baselineURL: async ({ workspace }, use) => {
     const bundle = await readFile('.tmp/e2e/baseline.js');
-    const server = createServer((request, response) => {
+    const server = createServer(async (request, response) => {
+      if (request.url === "/document") {
+        response.setHeader("Content-Type", "text/plain; charset=utf-8");
+        response.end(await readFile(join(workspace, "notes.txt"))); return;
+      }
       response.setHeader('Content-Type', request.url === '/baseline.js' ? 'text/javascript' : 'text/html');
       response.end(request.url === '/baseline.js' ? bundle : '<!doctype html><title>CodeMirror baseline</title><div id="editor"></div><script src="/baseline.js"></script>');
     });

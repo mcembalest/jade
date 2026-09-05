@@ -149,3 +149,29 @@ test('navigation during a slow save: repeated Back keeps unsaved text in its fil
   expect(await documentText(page)).toBe('print("keep this too")');
   expect(await readFile(join(workspace,'code.py'),'utf8')).toBe('print("hello")\n');
 });
+
+test('repeated writing and coding: switching, external changes, and reopening preserve each file', async ({page,appURL,workspace}) => {
+  test.setTimeout(30_000);
+  const files = ['notes.txt','code.py','reading.md'];
+  await writeFile(join(workspace,'reading.md'),'Reading notes\n');
+  await page.goto(appURL+'/?file=notes.txt'); await ready(page);
+  const expected = new Map<string,string>();
+  for(let round=0;round<6;round++) {
+    for(const file of files) {
+      await page.getByRole('link',{name:file,exact:true}).click(); await fileIs(page,file); await ready(page);
+      if(expected.has(file)) expect(await documentText(page)).toBe(expected.get(file));
+      const contents = `${file}: revision ${round}\n\nNotes: café, 😀, 漢字\n`;
+      await editor(page).fill(contents); expected.set(file,contents);
+    }
+  }
+  await editor(page).press('ControlOrMeta+s'); await saved(page);
+  for(const file of files) expect(await readFile(join(workspace,file),'utf8')).toBe(expected.get(file));
+  await writeFile(join(workspace,'reading.md'),'Updated by an external tool\n');
+  await expect.poll(()=>documentText(page)).toBe('Updated by an external tool\n');
+  expected.set('reading.md','Updated by an external tool\n');
+  await page.reload(); await ready(page);
+  for(const file of files) {
+    await page.getByRole('link',{name:file,exact:true}).click(); await fileIs(page,file); await ready(page);
+    expect(await documentText(page)).toBe(expected.get(file));
+  }
+});
