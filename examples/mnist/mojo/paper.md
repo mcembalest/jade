@@ -1,5 +1,7 @@
 # Porting a nearest-centroid MNIST baseline to Mojo
 
+![Distances between the shared digit prototypes](distances.svg)
+
 ## Abstract
 
 This subproject translates a small Python digit classifier into native Mojo while preserving its data and algorithm. On the first 10,000 MNIST training images and first 1,000 test images, both implementations classify 773 test images correctly. The experiment establishes an aggregate correctness check before any performance work.
