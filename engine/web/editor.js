@@ -20,8 +20,67 @@ const initial = document.querySelector('#initial-content').value.replace(/\r\n/g
 let active = {file: body.dataset.file, revision: body.dataset.revision, saved: body.dataset.crlf === 'true' ? initial.replace(/\n/g, '\r\n') : initial};
 let saving = null, moving = false, checking = false, conflict = false, autosaveTimer = 0;
 let editor;
-let discardConfirmed = false;
-const text = () => editor.state.sliceDoc().replace(/\r\n/g, '\n').replace(/\n/g, active.saved.includes('\r\n') ? '\r\n' : '\n');
+let discardConfirmed = false, recovering = false, loadingDrafts = true;
+const draftPanel = document.querySelector('#draft-recovery');
+const draftSelect = document.querySelector('#draft-select');
+const backupStatus = document.createElement('div');
+backupStatus.id = 'draft-status'; backupStatus.setAttribute('role', 'status');
+form.insertBefore(backupStatus, document.querySelector('#editor'));
+const draftOwners = new Map();
+let availableDrafts = [], recoveredDraft = null;
+function owner() {
+  if (!draftOwners.has(active.file)) draftOwners.set(active.file, {id:crypto.randomUUID(), queue:Promise.resolve(), version:0, draft:null});
+  return draftOwners.get(active.file);
+}
+function draftURL(file = active.file) {
+  const url = fileURL(file); url.pathname = '/drafts'; return url;
+}
+function backup() {
+  const state = owner(), version = ++state.version;
+  const file = active.file, content = text(), revision = active.revision;
+  state.queue = state.queue.catch(() => {}).then(async () => {
+    if (version !== state.version) return;
+    const data = new URLSearchParams({jade:body.dataset.jade,file,id:state.id,content,revision});
+    state.draft = await (await request('/drafts', {method:'POST',body:data})).json();
+    if (active.file === file) backupStatus.textContent = '';
+  }).catch(error => { backupStatus.textContent = 'Recovery backup unavailable: ' + error.message; });
+  return state.queue;
+}
+async function removeDraft(draft, file = active.file) {
+  const url = draftURL(file); url.searchParams.set('id',draft.id); url.searchParams.set('token',draft.token);
+  await request(url, {method:'DELETE'});
+}
+async function clearSavedDrafts() {
+  const state = owner(); await state.queue;
+  const draft = state.draft;
+  if (draft?.content === active.saved) { await removeDraft(draft); if (state.draft === draft) state.draft = null; }
+  if (recoveredDraft) { await removeDraft(recoveredDraft); recoveredDraft = null; }
+}
+function renderDrafts() {
+  draftSelect.replaceChildren(...availableDrafts.map(draft => {
+    const option = document.createElement('option'); option.value = draft.id;
+    option.textContent = new Date(draft.updated).toLocaleString(); return option;
+  }));
+  draftPanel.hidden = availableDrafts.length === 0;
+}
+async function loadDrafts() {
+  availableDrafts = []; renderDrafts();
+  loadingDrafts = true; freeze(true); body.dataset.draftsReady = 'false';
+  try {
+    const data = await (await request(draftURL())).json();
+    availableDrafts = data.drafts.filter(draft => draft.id !== owner().id);
+    renderDrafts();
+  } catch (error) { backupStatus.textContent = 'Cannot load recovery drafts: ' + error.message; }
+  finally { loadingDrafts = false; freeze(false); body.dataset.draftsReady = 'true'; }
+}
+function download(contents) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([contents], {type:'text/plain;charset=utf-8'}));
+  link.download = active.file.split('/').pop() || 'notes.txt'; link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+const text = () => editor.state.sliceDoc().replace(/\r\n/g, '\n').replace(/\n/g, (active.lineEnding ?? (active.saved.includes('\r\n') ? '\r\n' : '\n')));
 const dirty = () => text() !== active.saved;
 const cacheKey = file => 'jade-position:' + body.dataset.jade + ':' + file;
 
@@ -59,9 +118,11 @@ function makeState(contents, file) {
       if (!update.docChanged) return;
       discardConfirmed = false; reloadButton.textContent = 'Reload from disk';
       clearTimeout(autosaveTimer);
+      backup();
       if (conflict) { report('File changed on disk. Your edits are kept here.', true); return; }
+      if (recovering) { report('Recovered draft. Save when ready, or reload from disk.', true); return; }
       report(dirty() ? 'Edited' : 'Saved');
-      if (dirty()) autosaveTimer = setTimeout(save, 800);
+      autosaveTimer = setTimeout(save, 800);
     }),
   ]});
 }
@@ -96,20 +157,27 @@ function refreshPreview(data) {
 }
 async function save() {
   clearTimeout(autosaveTimer);
+  if (loadingDrafts) return false;
+  recovering = false;
   if (saving) return saving;
-  if (!dirty()) return true;
   if (conflict) return false;
   saving = (async () => {
     try {
-      while (dirty()) {
-        const contents = text();
-        report('Saving…');
-        // URL encoding preserves LF/CRLF; multipart form serialization normalizes newlines.
-        const data = new URLSearchParams();
-        data.set('jade', body.dataset.jade); data.set('file', active.file);
-        data.set('content', contents); data.set('revision', active.revision);
-        const result = await (await request('/save', {method:'POST', body:data})).json();
-        active.saved = contents; active.revision = result.revision;
+      for (;;) {
+        while (dirty()) {
+          const contents = text();
+          await backup();
+          report('Saving…');
+          // URL encoding preserves LF/CRLF; multipart form serialization normalizes newlines.
+          const data = new URLSearchParams();
+          data.set('jade', body.dataset.jade); data.set('file', active.file);
+          data.set('content', contents); data.set('revision', active.revision);
+          const result = await (await request('/save', {method:'POST', body:data})).json();
+          active.saved = contents; active.revision = result.revision;
+        }
+        try { await clearSavedDrafts(); }
+        catch (error) { backupStatus.textContent = 'Saved; recovery draft retained: ' + error.message; }
+        if (!dirty()) break;
       }
       report('Saved'); rememberPosition();
       return true;
@@ -122,24 +190,24 @@ async function save() {
   try { return await saving; } finally { saving = null; }
 }
 async function leave(action) {
-  if (moving) return;
+  if (moving || loadingDrafts) return;
   moving = true; freeze(true);
   try { if (await save()) { rememberPosition(); await action(); } }
   catch (error) { report(error.message, true); }
   finally { moving = false; freeze(false); }
 }
-function showFile(data, href, link) {
+async function showFile(data, href, link) {
   sessions.set(active.file, {state:editor.state, revision:active.revision, scroll:editor.scrollDOM.scrollTop});
   const cached = sessions.get(data.selected);
   active = {file:data.selected, saved:data.contents, revision:data.revision};
-  conflict = false;
+  conflict = false; recovering = false; recoveredDraft = null;
   editor.setState(cached?.revision === data.revision ? cached.state : makeState(data.contents, data.selected));
   editor.scrollDOM.scrollTop = cached?.revision === data.revision ? cached.scroll : position(data.selected).scroll || 0;
   body.dataset.file = data.selected;
   document.querySelector('#file-name').textContent = data.selected;
   document.querySelectorAll('.file-link').forEach(node => node.classList.toggle('active', node === link));
   if (href) history.pushState({}, '', href);
-  refreshPreview(data); report('Saved'); editor.focus();
+  refreshPreview(data); report('Saved'); await loadDrafts(); editor.focus();
 }
 document.querySelector('#workspace-root')?.addEventListener('click', event => {
   event.preventDefault(); leave(async () => { location.href = '/'; });
@@ -152,12 +220,12 @@ document.querySelectorAll('.file-link').forEach(link => {
       if (link.dataset.jade !== body.dataset.jade) { location.href = link.href; return; }
       if (link.dataset.file === active.file) return;
       const data = await (await request(fileURL(link.dataset.file))).json();
-      showFile(data, link.href, link);
+      await showFile(data, link.href, link);
     });
   });
 });
 reloadButton.addEventListener('click', () => {
-  if (moving || saving) return;
+  if (moving || saving || loadingDrafts) return;
   if (dirty() && !discardConfirmed) {
     discardConfirmed = true; reloadButton.textContent = 'Discard edits and reload';
     report('Download your edits to keep a copy, or confirm discarding them.', true);
@@ -165,21 +233,46 @@ reloadButton.addEventListener('click', () => {
   }
   discardConfirmed = false; reloadButton.textContent = 'Reload from disk';
   moving = true; freeze(true); clearTimeout(autosaveTimer);
-  request(fileURL()).then(response => response.json()).then(data => {
+  request(fileURL()).then(response => response.json()).then(async data => {
+    const state = owner(); await state.queue;
+    if (state.draft) { await removeDraft(state.draft); state.draft = null; }
+    if (recoveredDraft) { await removeDraft(recoveredDraft); recoveredDraft = null; }
+    recovering = false;
     sessions.delete(active.file);
     active = {file:data.selected, saved:data.contents, revision:data.revision}; conflict = false;
     editor.setState(makeState(data.contents, data.selected));
     refreshPreview(data); report('Reloaded from disk');
   }).catch(error => report(error.message, true)).finally(() => { moving = false; freeze(false); });
 });
-copyButton.addEventListener('click', () => {
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([text()], {type:'text/plain;charset=utf-8'}));
-  link.download = active.file.split('/').pop() || 'notes.txt'; link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+copyButton.addEventListener('click', () => download(text()));
+document.querySelector('#download-draft').addEventListener('click', () => {
+  const draft = availableDrafts.find(item => item.id === draftSelect.value);
+  if (draft) download(draft.content);
 });
+document.querySelector('#recover-draft').addEventListener('click', () => {
+  if (dirty() || moving || saving) { report('Save or download your current edits before recovering a draft.', true); return; }
+  const draft = availableDrafts.find(item => item.id === draftSelect.value);
+  if (!draft) return;
+  recoveredDraft = draft; recovering = true; conflict = draft.revision !== active.revision && draft.content !== active.saved;
+  if (draft.content !== active.saved) active.revision = draft.revision;
+  active.lineEnding = draft.content.includes('\r\n') ? '\r\n' : '\n';
+  editor.setState(makeState(draft.content, active.file));
+  backup(); clearTimeout(autosaveTimer);
+  availableDrafts = availableDrafts.filter(item => item.id !== draft.id); renderDrafts();
+  report(conflict ? 'Recovered draft; file changed on disk. Download your edits or reload from disk.' : 'Recovered draft. Save when ready, or reload from disk.', true);
+  editor.focus();
+});
+document.querySelector('#discard-draft').addEventListener('click', async () => {
+  if (moving || saving || loadingDrafts) return;
+  const file = active.file;
+  const draft = availableDrafts.find(item => item.id === draftSelect.value);
+  if (!draft) return;
+  try { await removeDraft(draft, file); if (active.file === file) { availableDrafts = availableDrafts.filter(item => item.id !== draft.id); renderDrafts(); } }
+  catch (error) { backupStatus.textContent = error.message; }
+});
+if (active.file) loadDrafts(); else { loadingDrafts = false; body.dataset.draftsReady = 'true'; }
 async function checkDisk() {
-  if (checking || moving || saving || !active.file || document.hidden) return;
+  if (checking || moving || saving || loadingDrafts || recovering || !active.file || document.hidden) return;
   checking = true;
   const file = active.file, previousDoc = editor.state.doc;
   try {

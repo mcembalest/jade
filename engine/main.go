@@ -108,6 +108,9 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
     #save-status { margin-left:auto; flex:1 1 140px; text-align:right; overflow-wrap:anywhere; color:var(--muted); font:11px/1.3 -apple-system,BlinkMacSystemFont,system-ui,sans-serif; }
     #editor { min-height:0; flex:1; overflow:hidden; }
     #initial-content { display:none; }
+    #draft-recovery { padding:10px 14px; background:#fff6d9; }
+    #draft-recovery select { max-width:200px; }
+    #draft-recovery button { margin:3px; }
     .filebar button { font-size:11px; min-height:24px; padding:2px 6px; }
 
     #resolved[hidden] { display:none; }
@@ -146,6 +149,7 @@ const pageTemplate = `{{define "tree"}}{{range .}}{{if .Directory}}<li><details 
           <input type="hidden" name="file" value="{{.Selected}}">
           <textarea id="initial-content" hidden>
 {{.Contents}}</textarea>
+          <div id="draft-recovery" hidden><label>Unsaved drafts <select id="draft-select" aria-label="Unsaved drafts"></select></label><button id="recover-draft" type="button">Recover draft</button><button id="download-draft" type="button">Download draft</button><button id="discard-draft" type="button">Discard draft</button></div>
           <div id="editor"></div>
         </form>
         <section id="resolved" {{if not .IsJade}}hidden{{end}}>
@@ -209,6 +213,7 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/", a.guard(a.home))
 	mux.HandleFunc("/file", a.guard(a.file))
 	mux.HandleFunc("/save", a.guard(a.save))
+	mux.HandleFunc("/drafts", a.guard(a.drafts))
 	mux.HandleFunc("/new", a.guard(a.create))
 	mux.HandleFunc("/front", a.guard(a.front))
 	mux.HandleFunc("/view", a.guard(a.view))
@@ -380,7 +385,23 @@ func (a *app) pageData(jadePath, selected, view string, includeTree bool) (pageD
 	if selected != "" {
 		contents, err = ReadWorkspaceFile(a.root, workspace.Path, selected)
 		if err != nil {
-			return pageData{}, err
+			// A restored browser URL must still offer recovery for a deleted file.
+			recovered := false
+			if includeTree && errors.Is(err, os.ErrNotExist) {
+				if directory, draftErr := a.draftDirectory(workspace.Path, selected); draftErr == nil {
+					if entries, draftErr := os.ReadDir(directory); draftErr == nil {
+						for _, entry := range entries {
+							if filepath.Ext(entry.Name()) == ".json" {
+								recovered = true
+								break
+							}
+						}
+					}
+				}
+			}
+			if !recovered {
+				return pageData{}, err
+			}
 		}
 	}
 	data := pageData{Workspace: workspace, Selected: selected, Contents: contents, Revision: fileRevision(contents), CRLF: strings.Contains(contents, "\r\n"), Files: buildFileTree(workspace), IsJade: selected == markerName}

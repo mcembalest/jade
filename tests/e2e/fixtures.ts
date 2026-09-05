@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { once } from 'node:events';
 
-export const test = base.extend<{ workspace: string; appURL: string; baselineURL: string }>({
+type App = { url: string; restart: (signal?: NodeJS.Signals) => Promise<string> };
+
+export const test = base.extend<{ workspace: string; app: App; appURL: string; baselineURL: string }>({
   workspace: async ({}, use) => {
     const directory = await mkdtemp(join(tmpdir(), 'jade-e2e-'));
     const workspace = join(directory, 'workspace');
@@ -14,38 +16,51 @@ export const test = base.extend<{ workspace: string; appURL: string; baselineURL
     await mkdir(join(directory, 'home'));
     try { await use(workspace); } finally { await rm(directory, { recursive: true, force: true }); }
   },
-  appURL: async ({ workspace }, use, testInfo) => {
-    const child = spawn(resolve('.tmp/e2e/jade'), ['--no-open', workspace], {
-      env: { ...process.env, HOME: join(dirname(workspace), 'home'), JADE_TERMINAL: '' },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+  app: async ({ workspace }, use, testInfo) => {
+    let child: ReturnType<typeof spawn> | undefined;
     let log = '';
-    child.stdout.on('data', data => { log += data; });
-    child.stderr.on('data', data => { log += data; });
-    try {
-      const url = await new Promise<string>((accept, reject) => {
+    const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
+      if (!child || child.exitCode !== null || child.signalCode !== null) return;
+      const exited = once(child, 'exit');
+      child.kill(signal);
+      const force = setTimeout(() => child?.kill('SIGKILL'), 6_000);
+      await exited;
+      clearTimeout(force);
+    };
+    const start = async () => {
+      child = spawn(resolve('.tmp/e2e/jade'), ['--no-open', workspace], {
+        env: { ...process.env, HOME: join(dirname(workspace), 'home'),
+          XDG_CONFIG_HOME: join(dirname(workspace), 'home', '.config'), JADE_TERMINAL: '' },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      let startup = '';
+      child.stdout!.on('data', data => { startup += data; log += data; });
+      child.stderr!.on('data', data => { log += data; });
+      return await new Promise<string>((accept, reject) => {
         const timer = setTimeout(() => reject(new Error('No engine readiness: ' + log)), 10_000);
-        child.once('error', error => { clearTimeout(timer); reject(error); });
-        child.once('exit', code => { clearTimeout(timer); reject(new Error('Engine exited: ' + code + '\n' + log)); });
-        child.stdout.on('data', () => {
-          const url = /JaDE: (http:\/\/127\.0\.0\.1:\d+)/.exec(log)?.[1];
+        child!.once('error', error => { clearTimeout(timer); reject(error); });
+        child!.once('exit', code => { clearTimeout(timer); reject(new Error('Engine exited: ' + code + '\n' + log)); });
+        child!.stdout!.on('data', () => {
+          const url = /JaDE: (http:\/\/127\.0\.0\.1:\d+)/.exec(startup)?.[1];
           if (url) { clearTimeout(timer); accept(url); }
         });
       });
-      await use(url);
+    };
+    try {
+      const app: App = { url: await start(), restart: async signal => {
+        await stop(signal);
+        app.url = await start();
+        return app.url;
+      } };
+      await use(app);
     } finally {
-      if (child.exitCode === null && child.signalCode === null) {
-        const exited = once(child, 'exit');
-        child.kill('SIGTERM');
-        const force = setTimeout(() => child.kill('SIGKILL'), 6_000);
-        await exited;
-        clearTimeout(force);
-      }
+      await stop();
       if (testInfo.status !== testInfo.expectedStatus) {
         await testInfo.attach('engine.log', { body: log, contentType: 'text/plain' });
       }
     }
   },
+  appURL: async ({ app }, use) => { await use(app.url); },
   baselineURL: async ({}, use) => {
     const bundle = await readFile('.tmp/e2e/baseline.js');
     const server = createServer((request, response) => {

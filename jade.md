@@ -32,7 +32,9 @@ CodeMirror provides undo/redo, indentation, search/replace (⌘F), and highlight
 
 JaDE autosaves after a short pause and saves before navigating. Saves check the disk revision and replace the file atomically. If another tool changes or deletes a file, JaDE retains conflicting local edits for you to download or discard explicitly. Unmodified open files refresh from disk; use **Refresh files** to update the file tree after external additions, renames, or deletions.
 
-Unsaved text is held in the open editor, not a crash-recovery store. Browser closing warns about unsaved changes; abrupt process or browser termination can still lose them.
+JaDE keeps local recovery drafts as edits reach the engine. Reopen the same file after a browser or engine restart to recover, download, or discard a draft. Recovering pauses autosave until you save (⌘S) or navigate; a changed disk revision still blocks overwriting. Each browser tab keeps a separate draft. If a file was deleted, reopening its previous JaDE URL still offers its draft for download.
+
+On macOS, drafts live in `~/Library/Application Support/JaDE/drafts`, outside your project. Saved or explicitly discarded drafts are removed; otherwise they remain until you handle them. A backup error is shown in the editor. Text that has not reached the engine can still be lost in an abrupt shutdown, so wait for **Saved** before stopping JaDE.
 
 ## Development
 
@@ -57,9 +59,9 @@ Then run everything with:
 npm test
 ```
 
-This builds the bundled editor, runs Go's race-enabled tests, and drives a headless browser against fresh temporary workspace copies. Editing mechanics run against both JaDE and a minimal CodeMirror baseline pinned by the lockfile. JaDE-specific checks cover saving, navigation, external changes, conflict recovery, line endings, file creation, and the minimum window layout. No installed desktop editors, personal files, external services, or desktop keystrokes are involved.
+This builds the bundled editor, runs Go's race-enabled tests, and drives a headless browser against fresh temporary workspace copies. Editing mechanics run against both JaDE and a minimal CodeMirror baseline pinned by the lockfile. JaDE-specific checks cover saving, navigation, external changes, conflict recovery, engine crashes and fresh-browser draft recovery, independent tab drafts, line endings, file creation, and the minimum window layout. No installed desktop editors, personal files, external services, or desktop keystrokes are involved.
 
-On failure, screenshots, videos, browser traces, and engine logs are kept under `.tmp/test-results`. Run `npm run test:report` for the HTML report. It does not claim crash recovery or Sublime/Obsidian feature parity.
+On failure, screenshots, videos, browser traces, and engine logs are kept under `.tmp/test-results`. Run `npm run test:report` for the HTML report. The baseline checks editing behavior; it does not claim Sublime/Obsidian feature parity.
 
 Frontend sources live in `engine/web`. Commit the generated `editor.bundle.js` and third-party notices after frontend changes so `go install` works without a JavaScript build step. Runtime assets are served locally; dependency licenses are available at `/licenses.txt`.
 
@@ -90,6 +92,8 @@ Use `git` and `gh` in your terminal for version control and GitHub workflows, in
 ## Direction
 
 Focus on reliable text/file editing, nested project context, and rendered outputs. Prefer established dependencies when they reduce the behavior JaDE must maintain.
+
+The [MNIST example](examples/mnist/) and its [Mojo subproject](examples/mnist/mojo-max/) include short papers alongside their code. The MNIST paper also outlines a jax-js browser-training experiment.
 
 Specialized subprojects with their own `jade.md` can eventually prepare arXiv-ready paper artifacts or Substack-ready Markdown. The long-term paper-writing goal is to make Overleaf unnecessary. These are future workflows, not built-in publishing integrations; JaDE currently neither builds submission packages nor publishes to those services. Richer integrations and IDE controls can wait until the core editing experience is dependable.
 
