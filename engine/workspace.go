@@ -19,6 +19,7 @@ const (
 )
 
 var ignoredDirectories = map[string]bool{
+	".jade-sync":   true,
 	".build":       true,
 	".deps":        true,
 	".pixi":        true,

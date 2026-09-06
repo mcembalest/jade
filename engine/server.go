@@ -24,10 +24,18 @@ func Serve(ctx context.Context, root, address string, ready func(string)) error 
 		return err
 	}
 	defer listener.Close()
-	handler, err := NewHandler(root, listener.Addr().(*net.TCPAddr).Port)
+	application, err := newApp(root, listener.Addr().(*net.TCPAddr).Port)
 	if err != nil {
 		return err
 	}
+	application.syncer, err = openWorkspaceSync(application.root)
+	if err != nil {
+		return err
+	}
+	if application.syncer != nil {
+		go application.syncer.run(ctx)
+	}
+	handler := application.handler()
 	server := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second}
 	served := make(chan error, 1)
 	go func() { served <- server.Serve(listener) }()

@@ -4,3 +4,10 @@ sessions.md
 /.tmp/
 
 /engine/web/node_modules/
+/sync/cloudflare/node_modules/
+/sync/cloudflare/.wrangler/
+/sync/cloudflare/.dev.vars
+**/xcuserdata/
+**/.jade-sync/
+
+/remote/__pycache__/

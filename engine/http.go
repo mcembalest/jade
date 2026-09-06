@@ -50,6 +50,7 @@ type pageData struct {
 }
 
 type app struct {
+	syncer   *workspaceSync
 	root     string
 	markdown goldmark.Markdown
 	page     *template.Template
@@ -123,6 +124,7 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("/file", a.guard(a.file))
 	mux.HandleFunc("/search", a.guard(a.search))
 	mux.HandleFunc("/save", a.guard(a.save))
+	mux.HandleFunc("/sync", a.guard(a.syncHTTP))
 	mux.HandleFunc("/drafts", a.guard(a.drafts))
 	mux.HandleFunc("/new", a.guard(a.create))
 	mux.HandleFunc("/view", a.guard(a.view))

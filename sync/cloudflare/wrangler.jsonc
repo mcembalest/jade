@@ -1,0 +1,9 @@
+{
+  "name": "jade-personal-sync",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "d1_databases": [{ "binding": "DB", "database_name": "jade-personal-sync", "database_id": "cb3fa378-dbf0-475d-be9c-f1d39489e3f6" }]
+}

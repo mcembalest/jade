@@ -1,4 +1,5 @@
 import { initCompanion } from './companion.js';
+import { initSync } from './sync.js';
 import { basicSetup } from 'codemirror';
 import { EditorState, Compartment } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
@@ -455,3 +456,4 @@ addEventListener('keydown', event => {
 });
 
 initCompanion();
+initSync();
