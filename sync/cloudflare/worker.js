@@ -1,4 +1,6 @@
+import {projects} from './projects.js';
 import {remote} from './remote.js';
+import {backup,backupRoute} from './backups.js';
 const MAX_BYTES = 512 * 1024;
 const MAX_FILES = 500;
 const MAX_WORKSPACE_BYTES = 16 * 1024 * 1024;
@@ -11,8 +13,15 @@ const selectFiles = `SELECT f.*, COALESCE((SELECT json_group_object(deviceId, re
 const decode = row => row ? {...row, acks: JSON.parse(row.acks || '{}')} : null;
 async function current(db, path) { return decode(await db.prepare(selectFiles + ' WHERE f.path=?').bind(path).first()); }
 export default {
-  async fetch(request, env) {
+  async scheduled(controller,env,ctx) { ctx.waitUntil(backup(env)); },
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if(url.pathname==='/v1/backup') {
+      try { return await backupRoute(request,env,ctx); } catch { return json({error:'Backup status unavailable'},503); }
+    }
+    if (url.pathname === '/v1/projects' || url.pathname.startsWith('/v1/projects/')) {
+      try { return await projects(request,env); } catch(e) { return json({error:e instanceof SyntaxError?'Invalid JSON':'Project storage unavailable'},e instanceof SyntaxError?400:503); }
+    }
     if (url.pathname.startsWith('/v1/remote/')) {
       try { return await remote(request,env); } catch { return json({error:'Remote connection unavailable'},503); }
     }

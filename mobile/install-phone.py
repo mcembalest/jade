@@ -20,17 +20,23 @@ output = repo / ".tmp" / "ios-phone"
 output.mkdir(parents=True, exist_ok=True)
 log = output / "install.log"
 
-def run(command, *, private=False):
-    with log.open("a") as stream:
+def run(command, *, private=False, allow_locked=False):
+    with log.open("a+") as stream:
+        start = stream.tell()
         result = subprocess.run(command, cwd=repo, stdout=stream, stderr=subprocess.STDOUT)
+        stream.seek(start)
+        detail = stream.read()
     log.chmod(0o600)
     if result.returncode:
+        if allow_locked and ("BSErrorCodeDescription = Locked" in detail or "device was not, or could not be, unlocked" in detail):
+            print("JaDE is installed. Unlock your phone and open JaDE normally; iOS blocked automatic launch while locked.")
+            return False
         if private:
-            detail = log.read_text()
             if "profile has not been explicitly trusted" in detail:
                 raise SystemExit("JaDE is installed. On the iPhone, open Settings → General → VPN & Device Management, select your developer account, and Trust it. Then open JaDE and scan the private pairing QR, or rerun with --pair.")
             raise SystemExit("JaDE is installed, but pairing needs attention. Open JaDE on your phone and scan the private pairing QR on your Mac.")
         raise SystemExit(f"Apple could not complete this step. Keep the phone connected, unlocked, and in Developer Mode. Details: {log}")
+    return True
 
 print("Building and renewing JaDE with your Apple signing team…", flush=True)
 run(["xcodebuild", "-project", "mobile/JaDE.xcodeproj", "-scheme", "JaDE",
@@ -45,5 +51,5 @@ if args.pair:
     config = json.loads((Path.home() / "JaDE Mobile/.jade-sync/config.json").read_text())
     command += ["--payload-url", "jade://pair?" + urllib.parse.urlencode(config)]
 command += ["com.mcembalest.jade.mobile"]
-run(command, private=args.pair)
-print("JaDE installed and launched. Wait for the sync status on your phone.")
+if run(command, private=args.pair, allow_locked=True):
+    print("JaDE installed and launched. Wait for the sync status on your phone.")

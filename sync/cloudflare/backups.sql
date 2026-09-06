@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS backup_status (
+ id INTEGER PRIMARY KEY CHECK(id=1), lastSuccess TEXT NOT NULL,
+ manifest TEXT NOT NULL, error TEXT NOT NULL
+);

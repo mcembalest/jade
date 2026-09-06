@@ -5,7 +5,7 @@ os.umask(0o077)
 repo=Path(__file__).resolve().parent.parent
 support=Path.home()/'Library/Application Support/JaDE'
 folder=support/'remote';folder.mkdir(parents=True,exist_ok=True)
-for name in ['bridge.py','manage.py']:shutil.copy2(repo/'remote'/name,folder/name)
+for name in ['bridge.py','manage.py','cloud.py']:shutil.copy2(repo/'remote'/name,folder/name)
 config=support/'remote.json'
 if not config.exists():
     sync=json.loads((Path.home()/'JaDE Mobile/.jade-sync/config.json').read_text())

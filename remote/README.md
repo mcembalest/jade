@@ -54,3 +54,7 @@ The optional `LIVE_REMOTE_TEST` Xcode UI test uses an explicitly enabled isolate
 - User confirmed an edit of a real `Documents/first` note on the physical iPhone arrived on the Mac.
 
 - Signed simulator remote UI test passed: source-file browsing, local draft recovery after termination, and acknowledged Save to Mac. Temporary test-folder access was removed after validation.
+
+## Optional persistent cloud projects
+
+The updated helper's **Cloud projects** menu separately opts selected folders into persistent Cloudflare storage. See [the project protocol and delivery contract](../sync/cloudflare/PROJECTS.md). This does not change direct **Save to Mac** or automatically upload `first` or other enabled folders. The phone entry point is **Mac files → Cloud projects**.
