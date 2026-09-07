@@ -19,6 +19,13 @@ test('quiet defaults and a pinned file browser survive navigation and reload', a
   await page.goto(await app.restart());
   await expect(page.locator('#file-explorer')).toBeVisible();
   await page.locator('#pin-files').click();
+  await expect.poll(async () => (await (await page.request.get(app.url + '/session')).json()).filesPinned).toBe(false);
+  await page.reload();
+  // Open/closed state is now remembered independently from the pin preference.
+  await expect(page.locator('#file-explorer')).toBeVisible();
+  await expect(page.locator('#pin-files')).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#files-toggle').click();
+  await expect.poll(async () => (await (await page.request.get(app.url + '/session')).json()).filesOpen).toBe(false);
   await page.reload();
   await expect(page.locator('#file-explorer')).toBeHidden();
 });

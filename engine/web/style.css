@@ -28,6 +28,11 @@ aside[hidden] { display:none; }
 .explorer-head button { padding:0; width:25px; min-height:25px; border:0; background:transparent; font-size:17px; line-height:1; }
 .tree, .tree ul { margin:0; padding:0; list-style:none; }
 .tree { padding:6px 0 12px; }
+.file-filter { display:flex; gap:4px; padding:8px 7px 0; }
+#file-filter { min-width:0; width:100%; border:1px solid var(--line); border-radius:7px; padding:6px; background:var(--paper); }
+#file-filter::-webkit-search-cancel-button { -webkit-appearance:none; }
+#clear-file-filter { padding:0 8px; }
+#file-filter-status { margin:6px 9px 0; color:var(--muted); font-size:12px; }
 .tree ul { padding-left:11px; }
 .tree details > summary { display:flex; align-items:center; gap:5px; padding:4px 9px; cursor:pointer; color:#37423c; list-style:none; }
 .tree details > summary::before { flex:none; content:'›'; width:8px; color:#89948d; transition:transform .1s linear; }
@@ -63,6 +68,13 @@ dialog form, dialog label { display:grid; gap:12px; }
 dialog input { width:100%; min-width:0; padding:8px; border:1px solid var(--line); border-radius:7px; }
 dialog::backdrop { background:#17201b4a; }
 .dialog-actions { display:flex; justify-content:flex-end; gap:8px; }
+#projects-help, #link-help, #link-shortcuts { margin:0; color:var(--muted); font-size:12px; }
+#projects-error, #link-error { color:#a12f20; overflow-wrap:anywhere; }
+#projects-error:empty, #link-error:empty { display:none; }
+#recent-projects { display:grid; gap:6px; }
+#recent-projects p { margin:0; }
+#recent-projects button { width:100%; text-align:left; white-space:normal; overflow-wrap:anywhere; }
+#session-notice, #session-save-notice, #projects-warning { margin:0; padding:8px 12px; font-size:12px; color:var(--muted); background:var(--panel); overflow-wrap:anywhere; }
 #new-file-error { margin:0; color:#9b3b28; overflow-wrap:anywhere; }
 #new-file-error:empty { display:none; }
 .cm-editor .cm-panels { background:var(--panel); color:var(--ink); }

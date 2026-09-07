@@ -25,3 +25,9 @@ python3 mobile/install-phone.py --team YOUR_TEAM_ID --device YOUR_IPHONE_UDID
 Add `--pair` on the first installation to use the Mac's existing pairing configuration. The installer updates the existing app without deleting its local notes. With a free Personal Team, renew before the seven-day provisioning expiry; do not uninstall the app to renew it.
 
 The **Mac files** tab browses and edits enabled writing folders and source files on your awake Mac. See [remote editing](../remote/README.md) for folder permissions, manual Save to Mac, and draft recovery.
+
+## Source editing
+
+The Mac files editor uses a native text view with a keyboard toolbar: indent selected lines by four spaces, remove up to four leading spaces (or one tab), insert code punctuation, undo/redo, and dismiss the keyboard. Smart quotes and smart dashes are disabled so typing preserves source punctuation. Each action uses the same phone-draft binding as typing; **Save to Mac** is still explicit. Notes editing is unchanged.
+
+`JaDE/SourceTextEditor.swift` contains only presentation and in-memory editing. Its line-edit helper uses UTF-16 selection offsets to match UIKit and preserves existing line endings. It has no storage or network dependencies. See [editor tests](tests/README.md) for pure Swift and isolated native verification.

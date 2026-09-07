@@ -9,6 +9,8 @@ final class Connection: NSObject, NSApplicationDelegate {
         item = NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         item.button?.title = "JaDE"
         let menu = NSMenu()
+        menu.addItem(withTitle:"Open JaDE in browser",action:#selector(openEditor),keyEquivalent:"").target = self
+        menu.addItem(.separator())
         menu.addItem(withTitle:"Choose writing folder or repo…",action:#selector(choose),keyEquivalent:"").target = self
         menu.addItem(withTitle:"Restart connection",action:#selector(restart),keyEquivalent:"").target = self
         menu.addItem(.separator())
@@ -19,6 +21,17 @@ final class Connection: NSObject, NSApplicationDelegate {
         if CommandLine.arguments.contains("--choose") { choose() }
     }
     func applicationShouldHandleReopen(_ sender:NSApplication,hasVisibleWindows flag:Bool)->Bool { choose();return true }
+    @objc func openEditor() {
+        // The installed desktop service uses this address (sync/install-mac.py).
+        let url = URL(string:"http://127.0.0.1:7339")!
+        if !NSWorkspace.shared.open(url) {
+            NSApp.activate(ignoringOtherApps:true)
+            let alert = NSAlert()
+            alert.messageText = "Could not open JaDE in your browser"
+            alert.informativeText = "Open http://127.0.0.1:7339 in your browser."
+            alert.runModal()
+        }
+    }
     func restoreScopes() {
         let bookmarks = UserDefaults.standard.dictionary(forKey:"folders") as? [String:Data] ?? [:]
         for data in bookmarks.values {
