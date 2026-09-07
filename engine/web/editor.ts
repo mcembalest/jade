@@ -10,7 +10,11 @@ import { javascript } from '@codemirror/lang-javascript';
 import { go } from '@codemirror/lang-go';
 import { initTerminals } from './terminal.js';
 import { initSearch } from './search.js';
+import { initFileFilter } from './file-filter.js';
 import { initPreview } from './preview.js';
+import { initProjects } from './projects.js';
+import { initWriting } from './writing.js';
+import { restoredSession, position, rememberPosition as rememberSessionPosition, flushSession, initSession } from './session.js';
 
 interface Draft { id: string; token: string; content: string; revision: string; updated: string }
 interface DraftOwner { id: string; queue: Promise<void>; version: number; draft: Draft | null }
@@ -33,6 +37,7 @@ const saveButton = document.querySelector<HTMLButtonElement>('#save-now')!;
 const updatePreview = initPreview(editPreviewFile);
 let filesPinned = false;
 try { filesPinned = document.cookie.split('; ').includes('jade-files-pinned=true'); } catch (_) {}
+if (restoredSession.positions) filesPinned = restoredSession.filesPinned;
 const pinFiles = document.querySelector<HTMLButtonElement>('#pin-files')!;
 pinFiles.setAttribute('aria-pressed', String(filesPinned));
 const filesButton = document.querySelector<HTMLButtonElement>('#files-toggle')!;
@@ -44,7 +49,7 @@ function showFiles(open: boolean) {
   filesButton.setAttribute('aria-expanded', String(open));
 }
 filesButton.addEventListener('click', () => showFiles(filesButton.getAttribute('aria-expanded') !== 'true'));
-showFiles(filesPinned);
+showFiles(restoredSession.positions ? restoredSession.filesOpen : filesPinned);
 pinFiles.addEventListener('click', () => {
   filesPinned = !filesPinned;
   pinFiles.setAttribute('aria-pressed', String(filesPinned));
@@ -121,7 +126,6 @@ function download(contents: string) {
 
 const text = () => editor.state.sliceDoc().replace(/\r\n/g, '\n').replace(/\n/g, editor.state.lineBreak);
 const dirty = () => text() !== active.saved;
-const cacheKey = (file: string) => 'jade-position:' + body.dataset.jade! + ':' + file;
 
 function report(message: string, problem = false) {
   status.textContent = message;
@@ -131,10 +135,7 @@ function report(message: string, problem = false) {
   reloadButton.hidden = !problem;
 }
 function rememberPosition() {
-  try { sessionStorage.setItem(cacheKey(active.file), JSON.stringify({head:editor.state.selection.main.head, scroll:editor.scrollDOM.scrollTop})); } catch (_) {}
-}
-function position(file: string): {head?: number; scroll?: number} {
-  try { return JSON.parse(sessionStorage.getItem(cacheKey(file)) || "{}") || {}; } catch (_) { return {}; }
+  rememberSessionPosition(active.file, editor.state.selection.main.head, editor.scrollDOM.scrollTop);
 }
 function language(file: string) {
   if (/\.md$/i.test(file)) return markdown();
@@ -156,6 +157,7 @@ function makeState(contents: string, file: string) {
       '.cm-gutters':{backgroundColor:'#fbfcfb',border:'none',color:'#89948d'}, '&.cm-focused':{outline:'none'},
     }),
     EditorView.updateListener.of(update => {
+      if (update.selectionSet) rememberPosition();
       if (!update.docChanged) return;
       discardConfirmed = false; reloadButton.textContent = 'Reload from disk';
       clearTimeout(autosaveTimer);
@@ -168,6 +170,7 @@ function makeState(contents: string, file: string) {
   ]});
 }
 editor = new EditorView({state:makeState(active.saved, active.file), parent:document.querySelector<HTMLElement>('#editor')!});
+initWriting(editor, () => active.file);
 editor.scrollDOM.scrollTop = position(active.file).scroll || 0;
 editor.focus();
 function freeze(value: boolean) {
@@ -230,7 +233,7 @@ async function save() {
 async function leave(action: () => Promise<void>) {
   if (moving || loadingDrafts) return;
   moving = true; freeze(true);
-  try { if (await save()) { rememberPosition(); await action(); } }
+  try { if (await save()) { rememberPosition(); await flushSession(); await action(); } }
   catch (error) { report((error instanceof Error ? error.message : String(error)), true); }
   finally { moving = false; freeze(false); }
 }
@@ -252,7 +255,7 @@ async function showFile(data: FileData, href: string) {
   }
   refreshPreview(data, true); report('Saved'); await loadDrafts();
   if (!filesPinned) showFiles(false);
-  editor.focus();
+  editor.focus(); rememberPosition();
 }
 document.querySelector<HTMLElement>('#workspace-root')!?.addEventListener('click', event => {
   event.preventDefault(); leave(async () => { location.href = '/'; });
@@ -455,5 +458,8 @@ addEventListener('keydown', event => {
   if (event.key.toLowerCase() === 'j') { event.preventDefault(); openTerminal(); }
 });
 
+initSession(() => ({file:active.file, head:editor.state.selection.main.head, scroll:editor.scrollDOM.scrollTop}), editor.scrollDOM);
+initFileFilter();
+initProjects(leave);
 initCompanion();
 initSync();

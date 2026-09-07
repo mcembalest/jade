@@ -181,11 +181,11 @@ struct MacEditor: View {
     var body: some View {
         VStack(spacing:0) {
             HStack { if busy { ProgressView() }; Text(status).font(.footnote); Spacer() }.padding().background(Color.green.opacity(0.08))
-            TextEditor(text:Binding(get:{text},set:{ value in
+            SourceTextEditor(text:Binding(get:{text},set:{ value in
                 text = value
                 do { try mac.saveDraft(root.id,path,MacDraft(content:value,revision:revision)); status = "Draft saved on iPhone · not sent to Mac" }
                 catch { status = "Local save failed: " + error.localizedDescription }
-            })).font(.system(.body,design:.monospaced)).autocorrectionDisabled().textInputAutocapitalization(.never).disabled(!loaded || busy).accessibilityLabel("Mac file text")
+            })).disabled(!loaded || busy).accessibilityLabel("Mac file text")
             Button(busy ? "Waiting for Mac…" : "Save to Mac") { Task { await save() } }.buttonStyle(.borderedProminent).padding().disabled(!loaded || busy)
         }.navigationTitle((path as NSString).lastPathComponent).navigationBarTitleDisplayMode(.inline)
             .toolbar { Menu {
