@@ -12,6 +12,31 @@ import (
 // Serve binds a loopback listener before reporting readiness. A zero port lets
 // the OS choose a free port. The jade command uses this for browser and headless runs.
 func Serve(ctx context.Context, root, address string, ready func(string)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	registry := newProjectRegistry(ctx)
+	err := serveProject(ctx, root, address, func(url string) {
+		actual, err := ResolveWorkspaceRoot(root)
+		if err == nil {
+			registry.mu.Lock()
+			registry.urls[actual] = url
+			registry.mu.Unlock()
+		}
+		if ready != nil {
+			ready(url)
+		}
+	}, registry, true)
+	cancel()
+	// Opening holds this lock while registering a child; after cancellation no
+	// new child can be added, so waiting also drains in-flight child HTTP work.
+	registry.mu.Lock()
+	registry.mu.Unlock()
+	registry.children.Wait()
+	return err
+}
+
+// Child desktop projects reuse HTTP behavior without enabling Notes sync.
+func serveProject(ctx context.Context, root, address string, ready func(string), registry *projectRegistry, enableSync bool) error {
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
 		return err
@@ -28,12 +53,15 @@ func Serve(ctx context.Context, root, address string, ready func(string)) error 
 	if err != nil {
 		return err
 	}
-	application.syncer, err = openWorkspaceSync(application.root)
-	if err != nil {
-		return err
-	}
-	if application.syncer != nil {
-		go application.syncer.run(ctx)
+	application.projects = registry
+	if enableSync {
+		application.syncer, err = openWorkspaceSync(application.root)
+		if err != nil {
+			return err
+		}
+		if application.syncer != nil {
+			go application.syncer.run(ctx)
+		}
 	}
 	handler := application.handler()
 	server := &http.Server{Handler: handler, BaseContext: func(net.Listener) context.Context { return ctx }, ReadHeaderTimeout: 5 * time.Second}

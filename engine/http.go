@@ -38,18 +38,21 @@ type fileNode struct {
 }
 
 type pageData struct {
-	Workspace Workspace
-	Selected  string
-	Contents  string
-	Revision  string
-	CRLF      bool
-	Files     []*fileNode
-	Markdown  bool
-	View      string
-	ViewURL   string
+	Session       template.JS
+	SessionNotice string
+	Workspace     Workspace
+	Selected      string
+	Contents      string
+	Revision      string
+	CRLF          bool
+	Files         []*fileNode
+	Markdown      bool
+	View          string
+	ViewURL       string
 }
 
 type app struct {
+	projects *projectRegistry
 	syncer   *workspaceSync
 	root     string
 	markdown goldmark.Markdown
@@ -122,6 +125,8 @@ func (a *app) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", a.guard(a.home))
 	mux.HandleFunc("/file", a.guard(a.file))
+	mux.HandleFunc("/session", a.guard(a.sessionHTTP))
+	mux.HandleFunc("/projects", a.guard(a.projectsHTTP))
 	mux.HandleFunc("/search", a.guard(a.search))
 	mux.HandleFunc("/save", a.guard(a.save))
 	mux.HandleFunc("/sync", a.guard(a.syncHTTP))
@@ -350,7 +355,7 @@ func (a *app) home(response http.ResponseWriter, request *http.Request) {
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	data, err := a.pageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"), true)
+	data, err := a.restoredPageData(queryPath(request, "jade", "."), request.URL.Query().Get("file"), request.URL.Query().Get("view"), request.URL.Query().Has("file") || request.URL.Query().Has("view"))
 	if err != nil {
 		http.Error(response, err.Error(), http.StatusBadRequest)
 		return

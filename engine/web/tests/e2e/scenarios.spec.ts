@@ -70,9 +70,8 @@ test('notes: create a meeting note, continue a list, switch workspace, return', 
   await expect(page.locator('body')).toHaveAttribute('data-jade','inner');
   expect(await readFile(join(workspace,'meetings/2026-09-04.md'),'utf8')).toBe(note);
   await page.getByRole('link',{name:'JADE',exact:true}).click();
-  await ready(page);
-  await revealFiles(page);
-  await page.getByRole('link',{name:'2026-09-04.md',exact:true}).click();
+  await expect(page.locator('body')).toHaveAttribute('data-jade','.');
+  // Returning to the project now restores its last file automatically.
   await fileIs(page,'meetings/2026-09-04.md'); await ready(page);
   expect(await documentText(page)).toBe(note);
 });

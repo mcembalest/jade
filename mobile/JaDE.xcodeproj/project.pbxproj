@@ -4,6 +4,8 @@
  classes = {};
  objectVersion = 56;
  objects = {
+ E31000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SourceTextEditor.swift; sourceTree = "<group>"; };
+ E31000000000000000000002 = {isa = PBXBuildFile; fileRef = E31000000000000000000001; };
  D00000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudStore.swift; sourceTree = "<group>"; };
  D00000000000000000000002 = {isa = PBXBuildFile; fileRef = D00000000000000000000001; };
  D00000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudViews.swift; sourceTree = "<group>"; };
@@ -17,10 +19,10 @@
   A00000000000000000000005 = {isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000010; buildPhases = (A00000000000000000000011,A00000000000000000000012,A00000000000000000000013); buildRules = (); dependencies = (); name = JaDE; productName = JaDE; productReference = A00000000000000000000009; productType = "com.apple.product-type.application"; };
   A00000000000000000000006 = {isa = XCBuildConfiguration; name = Debug; buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; DEBUG_INFORMATION_FORMAT = dwarf; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; }; };
   A00000000000000000000007 = {isa = XCBuildConfiguration; name = Release; buildSettings = { SDKROOT = iphoneos; IPHONEOS_DEPLOYMENT_TARGET = 17.0; SWIFT_VERSION = 5.0; SWIFT_COMPILATION_MODE = wholemodule; }; };
-  A00000000000000000000008 = {isa = PBXGroup; path = JaDE; sourceTree = "<group>"; children = (D00000000000000000000001,D00000000000000000000003,C00000000000000000000001,A00000000000000000000014,A00000000000000000000015,A00000000000000000000016,A00000000000000000000021); };
+  A00000000000000000000008 = {isa = PBXGroup; path = JaDE; sourceTree = "<group>"; children = (E31000000000000000000001,D00000000000000000000001,D00000000000000000000003,C00000000000000000000001,A00000000000000000000014,A00000000000000000000015,A00000000000000000000016,A00000000000000000000021); };
   A00000000000000000000009 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JaDE.app; sourceTree = BUILT_PRODUCTS_DIR; };
   A00000000000000000000010 = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000017,A00000000000000000000018); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-  A00000000000000000000011 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (D00000000000000000000002,D00000000000000000000004,C00000000000000000000002,A00000000000000000000019,A00000000000000000000020); runOnlyForDeploymentPostprocessing = 0; };
+  A00000000000000000000011 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (E31000000000000000000002,D00000000000000000000002,D00000000000000000000004,C00000000000000000000002,A00000000000000000000019,A00000000000000000000020); runOnlyForDeploymentPostprocessing = 0; };
   A00000000000000000000012 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
   A00000000000000000000013 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000022); runOnlyForDeploymentPostprocessing = 0; };
   A00000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JaDEApp.swift; sourceTree = "<group>"; };

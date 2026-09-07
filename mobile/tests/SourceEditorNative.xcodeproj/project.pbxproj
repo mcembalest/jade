@@ -1,0 +1,14 @@
+// !$*UTF8*$!
+{ archiveVersion = 1; objectVersion = 56; objects = {
+AA = {isa=PBXProject; mainGroup=BB; targets=(CC); buildConfigurationList=DD; compatibilityVersion="Xcode 14.0"; };
+BB = {isa=PBXGroup; children=(F1,F2,PR); sourceTree="<group>";};
+CC = {isa=PBXNativeTarget; name=NativeTests; productName=NativeTests; productReference=PR; productType="com.apple.product-type.bundle.unit-test"; buildConfigurationList=DD; buildPhases=(SS,FF); };
+DD = {isa=XCConfigurationList; buildConfigurations=(EE); defaultConfigurationName=Debug;};
+EE = {isa=XCBuildConfiguration; name=Debug; buildSettings={SDKROOT=iphonesimulator; IPHONEOS_DEPLOYMENT_TARGET=17.0; SWIFT_VERSION=5.0; PRODUCT_BUNDLE_IDENTIFIER=com.jade.isolated.nativeeditortests; PRODUCT_NAME=NativeTests; GENERATE_INFOPLIST_FILE=YES; CODE_SIGNING_ALLOWED=NO;};};
+F1 = {isa=PBXFileReference; path=SourceTextEditorNativeTests.swift; sourceTree="<group>"; lastKnownFileType=sourcecode.swift;};
+F2 = {isa=PBXFileReference; path="../JaDE/SourceTextEditor.swift"; sourceTree="<group>"; lastKnownFileType=sourcecode.swift;};
+PR = {isa=PBXFileReference; path=NativeTests.xctest; sourceTree=BUILT_PRODUCTS_DIR; explicitFileType=wrapper.cfbundle;};
+B1 = {isa=PBXBuildFile; fileRef=F1;}; B2 = {isa=PBXBuildFile; fileRef=F2;};
+SS = {isa=PBXSourcesBuildPhase; buildActionMask=2147483647; files=(B1,B2); runOnlyForDeploymentPostprocessing=0;};
+FF = {isa=PBXFrameworksBuildPhase; buildActionMask=2147483647; files=(); runOnlyForDeploymentPostprocessing=0;};
+}; rootObject=AA; }

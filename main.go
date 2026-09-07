@@ -5,9 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 
@@ -37,6 +39,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err = engine.Serve(ctx, root, *address, func(url string) {
+		url = launchURL(url, path)
 		fmt.Println("JaDE: " + url)
 		fmt.Println("Press Ctrl+C to stop JaDE after saving your work.")
 		if !*noOpen {
@@ -61,4 +64,20 @@ func openBrowser(ctx context.Context, url string) error {
 	default:
 		return exec.CommandContext(ctx, "xdg-open", url).Run()
 	}
+}
+
+// An explicit file argument overrides any remembered selection for its folder.
+func launchURL(base, path string) string {
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return base
+	}
+	target, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	query := target.Query()
+	query.Set("file", filepath.Base(path))
+	target.RawQuery = query.Encode()
+	return target.String()
 }
