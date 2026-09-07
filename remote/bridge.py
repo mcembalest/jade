@@ -1,6 +1,8 @@
 """Outbound-only personal Mac file bridge. Folder permissions are local to this Mac."""
 from pathlib import Path
-import hashlib, json, os, stat, tempfile, time, urllib.request, urllib.error
+import hashlib, json, os, stat, tempfile, time, urllib.request, urllib.error, threading
+
+FILE_LOCK = threading.RLock()
 
 SUPPORT = Path.home() / 'Library/Application Support/JaDE'
 CONFIG = SUPPORT / 'remote.json'
@@ -100,6 +102,11 @@ def api(c,path,body=None):
 
 def run():
     os.umask(0o077)
+    # Cloud and direct requests must share one module and one write lock.
+    import sys
+    sys.modules.setdefault("bridge",sys.modules[__name__])
+    import cloud
+    threading.Thread(target=cloud.run,daemon=True).start()
     while True:
         try:
             c=config()
@@ -107,7 +114,8 @@ def run():
                 receipt=SUPPORT/'remote-receipts'/b['id'];receipt.parent.mkdir(parents=True,exist_ok=True)
                 if receipt.exists():result=json.loads(receipt.read_text())
                 else:
-                    try:result=perform(config(),b)
+                    try:
+                        with FILE_LOCK:result=perform(config(),b)
                     except Exception as e:result={'error':str(e)}
                     tmp=receipt.with_suffix('.tmp');tmp.write_text(json.dumps(result));tmp.replace(receipt)
                 api(c,'/v1/remote/agent/result',{'id':b['id'],'result':result})

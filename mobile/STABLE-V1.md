@@ -33,3 +33,5 @@ This is a personal v1, not complete Obsidian compatibility: no mobile plugin sys
 - Earlier unsigned simulator attempts could not retain Keychain pairing. Live remote UI testing requires a signed simulator build and prior pairing; this was a test setup issue.
 
 Source checkpointing does not require reinstalling or restarting either app. Keep functional changes separate from documentation and housekeeping so this working baseline remains easy to restore.
+
+The opt-in Cloud projects extension is documented separately in `sync/cloudflare/PROJECTS.md`. It must preserve these v1 Notes and direct Mac-files behaviors; an existing folder grant is not consent to upload a persistent cloud copy.

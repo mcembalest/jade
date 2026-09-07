@@ -1,6 +1,85 @@
 import XCTest
 
 final class JaDEUITests: XCTestCase {
+    @MainActor func testBulkDownloadAndConflictResolution() async throws {
+        #if LOCAL_CLOUD_TEST
+        let project="ui-"+UUID().uuidString
+        func post(_ suffix:String,_ body:[String:Any]) async throws {
+            var request=URLRequest(url:URL(string:"http://127.0.0.1:8799/v1/projects/"+project+suffix)!)
+            request.httpMethod="POST";request.httpBody=try JSONSerialization.data(withJSONObject:body)
+            request.setValue("Bearer agent-test-secret",forHTTPHeaderField:"Authorization")
+            request.setValue("application/json",forHTTPHeaderField:"Content-Type")
+            let (_,response)=try await URLSession.shared.data(for:request)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode,200)
+        }
+        try await post("",["name":"Offline UI Test","enabled":true])
+        try await post("/file",["path":"code.py","content":"original code","baseRevision":"","mutationId":"initial"])
+        try await post("/file",["path":"second.py","content":"offline second file","baseRevision":"","mutationId":"second"])
+        let app=XCUIApplication()
+        app.launchEnvironment["JADE_OFFLINE_UI_TEST"]="1"
+        app.launchEnvironment["JADE_UI_TEST_ID"]=UUID().uuidString
+        app.launchEnvironment["JADE_CLOUD_LOCAL_UI_TEST"]="1"
+        func openProject() {
+            app.tabBars.buttons["Mac files"].tap()
+            app.buttons["Cloud projects · available with Mac off"].tap()
+            XCTAssertTrue(app.staticTexts["Offline UI Test"].waitForExistence(timeout:20))
+            app.staticTexts["Offline UI Test"].tap()
+        }
+        app.launch();openProject()
+        app.buttons["Download missing files for offline use"].tap()
+        XCTAssertTrue(app.staticTexts["2/2 files saved on this iPhone"].waitForExistence(timeout:20))
+        app.staticTexts["code.py"].tap()
+        let editor=app.textViews["Cloud project text"]
+        XCTAssertTrue(editor.waitForExistence(timeout:10));editor.tap();editor.typeText("phone draft ")
+        try await post("/file",["path":"code.py","content":"cloud changed","baseRevision":"initial","mutationId":"changed"])
+        app.buttons["Submit to Cloudflare"].tap()
+        XCTAssertTrue(app.buttons["Resolve conflict…"].waitForExistence(timeout:20));app.buttons["Resolve conflict…"].tap()
+        XCTAssertTrue(app.buttons["Use cloud version"].waitForExistence(timeout:5));app.buttons["Use cloud version"].tap()
+        let merged=app.textViews["Conflict resolution text"]
+        merged.tap();merged.typeText("combined ")
+        let result=merged.value as? String
+        app.swipeUp()
+        app.buttons["Save resolution and preserve original"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout:5));XCTAssertEqual(editor.value as? String,result)
+        app.terminate();app.launch();openProject()
+        XCTAssertTrue(app.staticTexts["2/2 files saved on this iPhone"].exists)
+        app.staticTexts["code.py"].tap();XCTAssertTrue(editor.waitForExistence(timeout:10));XCTAssertEqual(editor.value as? String,result)
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Offline download and preserved conflict resolution";shot.lifetime = .keepAlways;add(shot)
+        #else
+        throw XCTSkip("Requires isolated local Cloudflare test server")
+        #endif
+    }
+    func testCloudProjectWithMacAgentStopped() throws {
+        #if LIVE_CLOUD_TEST
+        let app=XCUIApplication()
+        app.launchEnvironment["JADE_OFFLINE_UI_TEST"]="1"
+        app.launchEnvironment["JADE_UI_TEST_ID"]=UUID().uuidString
+        app.launch()
+        app.tabBars.buttons["Mac files"].tap()
+        app.buttons["Cloud projects · available with Mac off"].tap()
+        XCTAssertTrue(app.staticTexts["JaDE Cloud Test"].waitForExistence(timeout:30))
+        app.staticTexts["JaDE Cloud Test"].tap()
+        XCTAssertTrue(app.staticTexts["wedding-test.py"].waitForExistence(timeout:20))
+        app.staticTexts["wedding-test.py"].tap()
+        let editor=app.textViews["Cloud project text"]
+        XCTAssertTrue(editor.waitForExistence(timeout:20))
+        editor.tap();editor.typeText("# phone while Mac off\n")
+        let draft=editor.value as? String
+        XCTAssertTrue(app.staticTexts["Draft saved on iPhone · not submitted"].exists)
+        app.terminate();app.launch()
+        app.tabBars.buttons["Mac files"].tap()
+        app.buttons["Cloud projects · available with Mac off"].tap()
+        XCTAssertTrue(app.staticTexts["JaDE Cloud Test"].waitForExistence(timeout:30))
+        app.staticTexts["JaDE Cloud Test"].tap()
+        app.staticTexts["wedding-test.py"].tap()
+        XCTAssertTrue(editor.waitForExistence(timeout:20));XCTAssertEqual(editor.value as? String,draft)
+        app.buttons["Submit to Cloudflare"].tap()
+        XCTAssertTrue(app.staticTexts["Stored in Cloudflare · Mac pending"].waitForExistence(timeout:30))
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Cloud accepted while Mac agent stopped";shot.lifetime = .keepAlways;add(shot)
+        #else
+        throw XCTSkip("Explicit live cloud-project test only")
+        #endif
+    }
     func testRemoteCodeEditAndDraftRecovery() throws {
         #if LIVE_REMOTE_TEST
         let app = XCUIApplication()

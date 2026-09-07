@@ -87,6 +87,7 @@ struct MacHome: View {
                     Text(mac.message).font(.callout)
                     Button(mac.busy ? "Connecting…" : "Connect / refresh") { Task { await mac.connect() } }.disabled(mac.busy)
                 }
+                Section { NavigationLink("Cloud projects · available with Mac off") { CloudProjectsView() } }
                 Section("Folders on your Mac") {
                     ForEach(mac.roots) { root in NavigationLink(root.name) { MacFolder(mac:mac,root:root,path:"") } }
                 }
