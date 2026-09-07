@@ -4,6 +4,7 @@ JaDE's **Mac files** tab edits UTF-8 text/source files in explicitly enabled Mac
 
 ## Installed configuration
 
+- Choose **JaDE → Open JaDE in browser** in the Mac menu bar to open the installed desktop editor in your default browser. It uses the existing local service at `http://127.0.0.1:7339`; that service must be running.
 - Open `~/Applications/JaDE Mac Connection.app` (or the **JaDE** menu bar item) to select a writing folder or repo working copy. Confirm **Allow this folder**. This normal macOS selection grants access to Documents/Desktop folders without Full Disk Access.
 - `~/Documents/first` is enabled and a physical iPhone edit of an existing vault note has been confirmed on the Mac. Hidden Obsidian configuration is excluded; this is text editing, not an implementation of Obsidian plugins or attachment previews.
 - In JaDE on iPhone, select **Mac files → Connect / refresh**, then the folder and file.
