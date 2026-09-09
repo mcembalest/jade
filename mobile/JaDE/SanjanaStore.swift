@@ -3,7 +3,7 @@ import Combine
 
 struct SanjanaSource: Codable { var title:String;var url:String }
 struct SanjanaMessage: Codable {
-    var id:String?;var role:String?;var text:String;var sources:[SanjanaSource]?;var foundAt:Double?
+    var id:String?;var role:String?;var text:String;var sources:[SanjanaSource]?;var foundAt:Double?;var proactive:Bool?
 }
 struct SanjanaState: Codable {
     var messages:[SanjanaMessage]?;var pending:[SanjanaMessage]?;var enabled:Bool
@@ -18,7 +18,7 @@ private struct SanjanaCache: Codable {
 @MainActor final class SanjanaStore: ObservableObject {
     @Published private var cache=SanjanaCache()
     @Published var busy=false
-    @Published var status="Connect to your Mac to see your shared conversation."
+    @Published var status="Connect to your Mac to see Sanjana’s updates."
     @Published var storageError:String?
     private let disk:URL
     private let session:URLSession
@@ -101,11 +101,11 @@ private struct SanjanaCache: Codable {
                 catch { status="Previous message has no confirmed reply. Shared history is refreshed below; your draft is kept." }
             }
             cache.state=try await request();connected=true;try persist()
-            status=cache.pending == nil ? "Shared with desktop Sanjana · checked just now" : "Message delivery unconfirmed. Check the conversation before sending again."
+            status="Shared with desktop Sanjana · updates checked just now"
             if cache.state?.enabled==true,let next=cache.state?.next,next<=Date().timeIntervalSince1970*1000,!(cache.state?.pending ?? []).isEmpty {
                 cache.state=try await request(SanjanaAction(action:"discover"));try persist()
             }
-        } catch { status="Offline / Mac unavailable. Showing your saved conversation. "+error.localizedDescription }
+        } catch { status="Offline / Mac unavailable. Showing saved updates. "+error.localizedDescription }
     }
     private func accept(_ state:SanjanaState,request:SanjanaRequest) throws {
         cache.state=state
@@ -142,7 +142,7 @@ private struct SanjanaCache: Codable {
     }
     func heartbeat() async {
         await refresh()
-        guard !Task.isCancelled,connected,!busy,cache.pending==nil,cache.draft.isEmpty,cache.state?.enabled==true,
+        guard !Task.isCancelled,connected,!busy,cache.state?.enabled==true,
               let next=cache.state?.researchNext,next<=Date().timeIntervalSince1970*1000,(cache.state?.pending ?? []).count<24 else { return }
         await act(SanjanaAction(action:"research"))
     }

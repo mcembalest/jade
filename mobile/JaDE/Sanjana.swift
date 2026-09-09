@@ -40,7 +40,6 @@ struct SanjanaSprite: View {
 struct SanjanaView: View {
     @StateObject private var store=makeSanjanaStore()
     @AppStorage("sanjana.still") private var still=false
-    @State private var retry=false
     @Environment(\.scenePhase) private var phase
     var body: some View {
         NavigationStack {
@@ -65,25 +64,20 @@ struct SanjanaView: View {
                             Text("Uses the same hourly limit and 8pm daily update as desktop Sanjana.").font(.caption).foregroundStyle(.secondary)
                         }.padding(.top,8)
                     }
-                    ForEach(Array((store.state?.messages ?? []).enumerated()),id:\.offset) { _,message in row(message) }
-                    if (store.state?.messages ?? []).isEmpty { Text("Your conversation with Sanjana will appear here when you connect.").foregroundStyle(.secondary) }
-                    TextField("Message Sanjana",text:Binding(get:{store.draft},set:store.edit),axis:.vertical).lineLimit(2...8).padding(12).background(.quaternary,in:RoundedRectangle(cornerRadius:12)).accessibilityLabel("Message Sanjana")
-                    Button("Send to Sanjana") { Task { await store.send() } }.buttonStyle(.borderedProminent).disabled(store.busy || store.pending || store.state?.enabled != true || store.draft.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
-                    if store.pending { Button("Review unconfirmed message…") { retry=true }.disabled(store.busy) }
-                    Text("The same Sanjana and conversation as your desktop. Your Mac runs her replies; keep it awake and the desktop JaDE service running. Saved chat and unsent drafts remain on this phone offline.").font(.caption).foregroundStyle(.secondary)
+                    Text("Updates from Sanjana").font(.title2.weight(.semibold))
+                    ForEach(Array((store.state?.messages ?? []).filter { $0.proactive == true }.reversed().enumerated()),id:\.offset) { _,message in row(message) }
+                    if !(store.state?.messages ?? []).contains(where:{$0.proactive == true}) { Text("Her updates will appear here as she finds things to share.").foregroundStyle(.secondary) }
+                    Text("Sanjana looks for discoveries while this tab or her desktop window is open. She shares a daily update around 8pm, using your Mac’s clock. Keep your Mac awake; saved updates are available offline.").font(.caption).foregroundStyle(.secondary)
                 }.padding()
             }.background(Color(uiColor:.systemGroupedBackground)).navigationTitle("Sanjana").navigationBarTitleDisplayMode(.inline)
                 .toolbar { Menu {
-                    Button("Refresh conversation") { Task { await store.refresh() } }.disabled(store.busy)
+                    Button("Refresh updates") { Task { await store.refresh() } }.disabled(store.busy)
                     Toggle("Still animation",isOn:$still)
                     Button("Hide Sanjana on all devices") { Task { await store.act(SanjanaAction(action:"enabled",enabled:false)) } }.disabled(store.busy)
                 } label: { Image(systemName:"ellipsis.circle") } }
-                .confirmationDialog("The previous message may already have reached Sanjana. Check the conversation first. Keep its text as an unsent draft?",isPresented:$retry,titleVisibility:.visible) {
-                    Button("Keep text as an unsent draft") { store.releaseUnconfirmed() }
-                }
                 .task(id:phase) {
                     guard phase == .active else { return }
-                    await store.refresh()
+                    await store.heartbeat()
                     while !Task.isCancelled {
                         do { try await Task.sleep(for:.seconds(30)) } catch { return }
                         await store.heartbeat()

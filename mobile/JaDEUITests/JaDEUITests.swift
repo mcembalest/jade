@@ -1,22 +1,23 @@
 import XCTest
 
 final class JaDEUITests: XCTestCase {
-    func testSanjanaCornerAndOfflineDraft() throws {
+    func testSanjanaUpdatesWithoutChat() throws {
         let app=XCUIApplication()
         app.launchEnvironment["JADE_OFFLINE_UI_TEST"]="1"
         app.launchEnvironment["JADE_UI_TEST_ID"]=UUID().uuidString
         app.launchEnvironment["JADE_SANJANA_FIXTURE"]="""
-        {"enabled":true,"messages":[{"id":"desktop","role":"assistant","text":"A little company, wherever you are."}],"pending":[{"text":"A discovery saved on your Mac","sources":[{"title":"Read the original","url":"https://example.com"}]}]}
+        {"enabled":true,"messages":[{"id":"desktop","role":"assistant","text":"A little company, wherever you are.","proactive":true}],"pending":[{"text":"A discovery saved on your Mac","sources":[{"title":"Read the original","url":"https://example.com"}]}]}
         """
         app.launch();app.tabBars.buttons["Sanjana"].tap()
         XCTAssertTrue(app.staticTexts["Sanjana’s corner"].waitForExistence(timeout:5))
         XCTAssertTrue(app.staticTexts["A little company, wherever you are."].exists)
         let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Sanjana on iPhone";shot.lifetime = .keepAlways;add(shot)
         app.swipeUp()
-        let draft=app.descendants(matching:.any).matching(identifier:"Message Sanjana").firstMatch
-        XCTAssertTrue(draft.waitForExistence(timeout:5));draft.tap();draft.typeText("A message for later")
-        app.terminate();app.launch();app.tabBars.buttons["Sanjana"].tap();app.swipeUp()
-        XCTAssertTrue(draft.waitForExistence(timeout:5));XCTAssertEqual(draft.value as? String,"A message for later")
+        XCTAssertFalse(app.descendants(matching:.any).matching(identifier:"Message Sanjana").firstMatch.exists)
+        XCTAssertFalse(app.buttons["Send to Sanjana"].exists)
+        XCTAssertTrue(app.staticTexts["Updates from Sanjana"].exists)
+        app.terminate();app.launch();app.tabBars.buttons["Sanjana"].tap()
+        XCTAssertTrue(app.staticTexts["A little company, wherever you are."].waitForExistence(timeout:5))
         app.tabBars.buttons["Notes"].tap();XCTAssertTrue(app.navigationBars["JaDE"].exists)
         app.tabBars.buttons["Mac files"].tap();XCTAssertTrue(app.buttons["Cloud projects · available with Mac off"].exists)
     }
