@@ -37,8 +37,13 @@ The Mac files editor uses a native text view with a keyboard toolbar: indent sel
 
 ## Sanjana
 
-The **Sanjana** tab brings you her discoveries and proactive updates. It has no message composer or chat controls. It uses the same desktop character, discovery queue, visibility setting, and hourly research / 8pm daily-update limits through the existing paired connection. Ordinary desktop chat messages are not shown in this update feed.
+Version 0.4.0 build 6 reads the authoritative Cloudflare state directly using the
+existing pairing. It displays cached updates offline and refreshes with GET only;
+it never asks the Mac relay to research or publish. There is no mobile composer or
+manual discovery action. Legacy cached drafts and receipts remain on disk.
 
-The existing sprite is bundled unchanged, with idle/wave animation, a Still animation preference, and system Reduce Motion support. Source links open natively. Downloaded updates remain readable offline. Research checks run while this tab is foregrounded, sharing the desktop's limits; they do not require you to send a message. Closing/backgrounding the tab stops new checks, though work already accepted by the Mac may finish. Your Mac and its desktop JaDE service must be awake for new discoveries. This does not add iOS background notifications.
-
-Version 0.3.1 build 5 removes the composer introduced in 0.3.0. Existing cached conversation/draft data is retained, but does not block discovery checks or appear as a chat interface. The native UI test verifies the update feed and absence of chat controls. The relay remains scoped to the existing companion service; note storage and folder grants are unchanged.
+Cloudflare owns hourly research opportunities and the daily 8pm America/New_York
+publication. **Pause research everywhere** is shared; hiding the character and
+stopping animation are local preferences. Desktop chat is excluded from the feed.
+Paid research currently awaits AI Gateway activation; the UI reports that status.
+See [Sanjana architecture and setup](../engine/web/companion/README.md).

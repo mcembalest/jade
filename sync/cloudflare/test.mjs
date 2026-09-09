@@ -8,10 +8,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 const token='local-test-key-not-for-production-123456';
-const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'worker.js',contents:await readFile('worker.js','utf8')},{type:'ESModule',path:'remote.js',contents:await readFile('remote.js','utf8')},{type:'ESModule',path:'projects.js',contents:await readFile('projects.js','utf8')},{type:'ESModule',path:'backups.js',contents:await readFile('backups.js','utf8')}],compatibilityDate:'2026-09-01',r2Buckets:['BACKUPS'],d1Databases:['DB'],bindings:{SYNC_TOKEN:token,REMOTE_AGENT_TOKEN:"agent-test-secret"}}));
+const mf=new Miniflare(convertV4MiniflareOptions({modules:[{type:'ESModule',path:'worker.js',contents:await readFile('worker.js','utf8')},...await Promise.all(['companion.js','companion-provider.js'].map(async path=>({type:'ESModule',path,contents:await readFile(path,'utf8')}))),{type:'ESModule',path:'remote.js',contents:await readFile('remote.js','utf8')},{type:'ESModule',path:'projects.js',contents:await readFile('projects.js','utf8')},{type:'ESModule',path:'backups.js',contents:await readFile('backups.js','utf8')}],compatibilityDate:'2026-09-01',r2Buckets:['BACKUPS'],d1Databases:['DB'],bindings:{SYNC_TOKEN:token,REMOTE_AGENT_TOKEN:"agent-test-secret"}}));
 before(async()=>{
  const db=await mf.getD1Database('DB');
- for(const statement of (await readFile('schema.sql','utf8') + '\n' + await readFile('projects.sql','utf8') + '\n' + await readFile('backups.sql','utf8')).match(/CREATE TABLE[\s\S]*?;|CREATE INDEX[\s\S]*?;|CREATE TRIGGER[\s\S]*?END;/g)) await db.prepare(statement).run();
+ for(const statement of (await readFile('schema.sql','utf8') + '\n' + await readFile('projects.sql','utf8') + '\n' + await readFile('backups.sql','utf8') + '\n' + await readFile('companion.sql','utf8')).match(/CREATE TABLE[\s\S]*?;|CREATE INDEX[\s\S]*?;|CREATE TRIGGER[\s\S]*?END;/g)) await db.prepare(statement).run();
 });
 after(()=>mf.dispose());
 const call=async(path,body,auth=token)=>{
@@ -138,4 +138,79 @@ assert not (p/'broken.sqlite').exists()
  assert.equal((await call('/v1/backup')).backup.lastSuccess,result.lastSuccess);
  assert.equal((await call('/v1/backup',{},token)).status,403);
  assert.equal((await call('/v1/backup',null,'wrong')).status,401);
+});
+
+test('Cloudflare owns research: migration, no client triggers, overlap, failure, pause, DST and atomic publication',async()=>{
+ const {scheduledCompanion,readState,changeState,localDate}=await import('./companion.js');
+ const db=await mf.getD1Database('DB'),env={DB:db};
+ const migration={action:'migrate',migration:'fixture-v1',profile:'Existing character',state:{enabled:true,messages:[{id:'old',role:'user',text:'Retained history'}],pending:[],researchNext:0}};
+ assert.equal((await call('/v1/companion',migration)).status,403);
+ assert.equal((await call('/v1/companion',migration,'agent-test-secret')).status,200);
+ assert.equal((await call('/v1/companion',migration,'agent-test-secret')).messages[0].id,'old');
+ assert.equal((await call('/v1/companion',{...migration,migration:'different'},'agent-test-secret')).status,409);
+ for(const action of ['research','discover','enabled'])assert.equal((await call('/v1/companion',{action})).status,400);
+ assert.equal((await call('/v1/companion',null,'bad')).status,401);
+ let calls=0,finish;
+ const provider=async()=>{calls++;return new Promise(resolve=>{finish=resolve;});};
+ const noon=Date.parse('2026-09-05T16:00:00Z');
+ const run=scheduledCompanion(env,noon,provider);
+ while(!finish)await new Promise(r=>setTimeout(r,1));
+ await Promise.all([scheduledCompanion(env,noon,provider),scheduledCompanion(env,noon+100,provider),call('/v1/companion'),call('/v1/companion')]);
+ assert.equal(calls,1);
+ finish({text:'Sourced finding',sources:[{title:'Original',url:'https://example.com/story?utm_source=x'}]});await run;
+ assert.equal((await readState(db)).state.pending.length,1);
+ // A new process/tick sees the durable reservation; failure cannot spend again.
+ await scheduledCompanion(env,noon+3600000,async()=>{calls++;throw Error('failure')});
+ await scheduledCompanion(env,noon+3600010,async()=>{calls++;});assert.equal(calls,2);
+ assert.equal((await readState(db)).state.pending.length,1);
+ await call('/v1/companion',{action:'settings',paused:true});
+ await scheduledCompanion(env,noon+7200000,async()=>{calls++;});assert.equal(calls,2);
+ await call('/v1/companion',{action:'settings',paused:false});
+ await scheduledCompanion(env,noon+7200000,async()=>{calls++;return {text:'Duplicate URL',sources:[{url:'https://example.com/story'}]};});
+ assert.equal((await readState(db)).state.pending.length,1);
+ const evening=Date.parse('2026-09-06T00:00:00Z');
+ await Promise.all(Array.from({length:5},()=>scheduledCompanion(env,evening,async()=>null)));
+ let state=(await readState(db)).state;
+ assert.equal(state.messages.filter(m=>m.proactive).length,1);assert.equal(state.pending.length,0);assert.equal(state.dailyDate,'2026-09-05');
+ assert.equal(state.messages[0].text,'Retained history');assert.equal(state.profile,'Existing character');
+ // Findings arriving after publication are retained for tomorrow, including pause midrun.
+ await changeState(db,s=>{s.researchNext=0;});
+ const late=scheduledCompanion(env,evening+1000,provider);while(calls<4)await new Promise(r=>setTimeout(r,1));
+ await call('/v1/companion',{action:'settings',paused:true});
+ finish({text:'Late finding',sources:[{title:'New',url:'https://example.com/new'}]});await late;
+ assert.equal((await readState(db)).state.pending.length,1);
+ await call('/v1/companion',{action:'settings',paused:false});
+ await scheduledCompanion(env,evening+2000,async()=>null);assert.equal((await readState(db)).state.pending.length,1);
+ assert.deepEqual(localDate(Date.parse('2026-11-02T01:00:00Z')),{date:'2026-11-01',hour:20});
+ assert.deepEqual(localDate(Date.parse('2026-03-09T00:00:00Z')),{date:'2026-03-08',hour:20});
+ // Downtime causes only one current opportunity, never a loop over missed hours.
+ let recovery=0;await scheduledCompanion(env,evening+10*86400000,async()=>{recovery++;return null;});assert.equal(recovery,1);
+ // The snapshot includes the complete authoritative document and CAS revision.
+ const bucket=await mf.getR2Bucket('BACKUPS');const result=await backup({DB:db,BACKUPS:bucket});
+ const manifest=JSON.parse(await (await bucket.get(result.manifest)).text());
+ assert.deepEqual(manifest.companion[0].document,(await readState(db)).document);
+ const folder=await mkdtemp(join(tmpdir(),'jade-companion-restore-'));
+ try {
+  await writeFile(join(folder,'manifest.json'),JSON.stringify(manifest));
+  for(const part of manifest.chunks)await writeFile(join(folder,part.key.split('/').at(-1)),await(await bucket.get(part.key)).text());
+  execFileSync('python3',['-c',`import importlib.util,json,pathlib,sqlite3
+spec=importlib.util.spec_from_file_location('restore','../../remote/restore-cloud-backup.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+p=pathlib.Path(${JSON.stringify(folder)});manifest=json.loads((p/'manifest.json').read_text());m.restore(manifest,lambda key:(p/key.split('/')[-1]).read_bytes(),p/'restored.sqlite')
+c=sqlite3.connect(p/'restored.sqlite');assert c.execute('SELECT document FROM companion_state').fetchone()[0]==manifest['companion'][0]['document']`]);
+ }finally{await rm(folder,{recursive:true,force:true});}
+});
+
+test('provider adapter enforces search/page/output budgets and rejects uncited text',async()=>{
+ const {researchProvider,MODEL}=await import('./companion-provider.js');let calls=0;
+ const state={profile:'Original profile',messages:[],pending:[]};
+ const env={SANJANA_AI_ENABLED:'true',SANJANA_GATEWAY:'test',AI:{run:async(model,input,options)=>{
+  calls++;assert.equal(model,MODEL);assert.equal(input.max_tokens,1200);
+  assert.equal(input.tools[0].max_uses,2);assert.equal(input.tools[1].max_uses,1);assert.equal(input.tools[1].max_content_tokens,3000);
+  assert.equal(options.gateway.collectLog,false);assert.equal(options.gateway.skipCache,true);
+  return {stop_reason:'end_turn',content:[{type:'text',text:'One sourced discovery',citations:[{url:'https://example.com/original',title:'Original'}]}]};
+ }}};
+ assert.equal(await researchProvider({...env,SANJANA_AI_ENABLED:'false'},state,0),null);assert.equal(calls,0);
+ assert.equal((await researchProvider(env,state,0)).sources[0].url,'https://example.com/original');assert.equal(calls,1);
+ env.AI.run=async()=>({stop_reason:'end_turn',content:[{type:'text',text:'Unsourced'}]});await assert.rejects(researchProvider(env,state,0));
+ env.AI.run=async()=>({stop_reason:'pause_turn',content:[]});await assert.rejects(researchProvider(env,state,0));
 });

@@ -461,7 +461,9 @@ func (a *app) renderMarkdown(response http.ResponseWriter, jadePath, sourceFile 
 	a.previewDocument(response, jadePath, sourceFile, true, rendered.String())
 }
 
-// Preview documents permit parent-side navigation handlers, but never document scripts.
+// WebKit needs allow-scripts for parent-installed navigation handlers;
+// default-src none still forbids document scripts. Chromium receives an additional
+// iframe sandbox without allow-scripts (see preview.ts).
 func (a *app) previewDocument(response http.ResponseWriter, jade, file string, editable bool, html string) {
 	path, _ := existingFile(a.root, jade, file)
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")

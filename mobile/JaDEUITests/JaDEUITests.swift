@@ -6,7 +6,7 @@ final class JaDEUITests: XCTestCase {
         app.launchEnvironment["JADE_OFFLINE_UI_TEST"]="1"
         app.launchEnvironment["JADE_UI_TEST_ID"]=UUID().uuidString
         app.launchEnvironment["JADE_SANJANA_FIXTURE"]="""
-        {"enabled":true,"messages":[{"id":"desktop","role":"assistant","text":"A little company, wherever you are.","proactive":true}],"pending":[{"text":"A discovery saved on your Mac","sources":[{"title":"Read the original","url":"https://example.com"}]}]}
+        {"enabled":true,"paused":false,"messages":[{"id":"desktop","role":"assistant","text":"A little company, wherever you are.","proactive":true}],"pending":[{"text":"A discovery saved in Cloudflare","sources":[{"title":"Read the original","url":"https://example.com"}]}]}
         """
         app.launch();app.tabBars.buttons["Sanjana"].tap()
         XCTAssertTrue(app.staticTexts["Sanjana’s corner"].waitForExistence(timeout:5))
@@ -15,6 +15,7 @@ final class JaDEUITests: XCTestCase {
         app.swipeUp()
         XCTAssertFalse(app.descendants(matching:.any).matching(identifier:"Message Sanjana").firstMatch.exists)
         XCTAssertFalse(app.buttons["Send to Sanjana"].exists)
+        XCTAssertFalse(app.buttons["Look for discoveries"].exists)
         XCTAssertTrue(app.staticTexts["Updates from Sanjana"].exists)
         app.terminate();app.launch();app.tabBars.buttons["Sanjana"].tap()
         XCTAssertTrue(app.staticTexts["A little company, wherever you are."].waitForExistence(timeout:5))

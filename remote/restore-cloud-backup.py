@@ -17,6 +17,7 @@ def restore(manifest,read_chunk,target):
             if not all(k.replace('_','').isalnum() for k in row):raise ValueError('Invalid column')
             db.execute('INSERT INTO '+table+'('+','.join('"'+k+'"' for k in row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
         for row in manifest['projects']:insert('projects',row)
+        for row in manifest.get('companion',[]):insert('companion_state',row)
         for part in manifest['chunks']:
             if part['table'] not in ('revisions','project_revisions'):raise ValueError('Invalid backup table')
             raw=read_chunk(part['key'])

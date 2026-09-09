@@ -22,7 +22,15 @@
   ],
   "triggers": {
     "crons": [
-      "17 7 * * *"
+      "17 7 * * *",
+      "0 * * * *"
     ]
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "vars": {
+    "SANJANA_AI_ENABLED": "false",
+    "SANJANA_GATEWAY": "jade-sanjana"
   }
 }

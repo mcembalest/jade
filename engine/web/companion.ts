@@ -52,7 +52,7 @@ export function initCompanion() {
   reduced.addEventListener('change', () => { frame = 0; animate(); });
   document.addEventListener('visibilitychange', () => { frame = 0; animate(); });
   type Message = { id: string; role: string; text: string; sources?: {title: string; url: string}[]; proactive?: boolean; foundAt?: number };
-  type State = { messages: Message[]; enabled: boolean; next: number; seen: string; pending?: Message[]; researchNext?: number; researchChecked?: number; researchError?: string };
+  type State = { messages: Message[]; enabled: boolean; next: number; seen: string; pending?: Message[]; researchNext?: number; researchChecked?: number; researchError?: string; paused?: boolean; providerStatus?: string; offline?: boolean };
   const chat = document.querySelector<HTMLElement>('#companion-chat')!;
   const input = document.querySelector<HTMLTextAreaElement>('#companion-input')!;
   const status = document.querySelector<HTMLElement>('#companion-status')!;
@@ -61,8 +61,7 @@ export function initCompanion() {
   const bubble = document.querySelector<HTMLButtonElement>('#companion-bubble')!;
   let state: State | undefined;
   let active: AbortController | undefined;
-  let activeAction = '';
-  let finishedActive = Promise.resolve();
+  const pause = document.querySelector<HTMLButtonElement>('#companion-pause')!;
   const research = document.querySelector<HTMLElement>('#companion-research')!;
   const researchStatus = document.querySelector<HTMLElement>('#companion-research-status')!;
   const researchCount = document.querySelector<HTMLElement>('#companion-research-count')!;
@@ -70,12 +69,11 @@ export function initCompanion() {
   let checking = false;
   let rendered = '';
   let seenPending = '';
-  let visibilityVersion = 0;
 
   async function api(body?: object, signal?: AbortSignal): Promise<State> {
     const options: RequestInit = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body), signal} : {signal, headers:{'X-JaDE-Companion-Hidden':String(hidden)}};
     let response = await fetch('/companion', options);
-    // An aborted research process may need a moment to release its shared lock.
+    // Another explicit desktop chat may briefly hold the shared chat lock.
     if (response.status === 409 && (body as {action?: string})?.action === 'chat') {
       await new Promise(resolve => window.setTimeout(resolve, 250));
       response = await fetch('/companion', options);
@@ -99,13 +97,8 @@ export function initCompanion() {
   }
   function render(next: State) {
     state = next;
-    // Server state is shared across ports and JaDE processes, including hide/restore.
-    if (hidden === next.enabled) {
-      hidden = !next.enabled;
-      save('jade.companion.hidden', String(hidden));
-      visibility();
-      if (hidden) card.hidePopover();
-    }
+    pause.textContent = next.paused ? 'Resume research everywhere' : 'Pause research everywhere';
+    if (next.offline) status.textContent = 'Offline · showing saved updates';
     const serialized = JSON.stringify(next.messages);
     if (serialized !== rendered) {
       rendered = serialized;
@@ -125,10 +118,11 @@ export function initCompanion() {
       if (!pending.length) research.textContent = 'No pending findings yet. New research will appear here as it is collected.';
     }
     researchCount.textContent = String(pending.length);
-    researchStatus.textContent = activeAction === 'research' && active ? 'Researching…' :
+    researchStatus.textContent = next.paused ? 'Research and daily publication are paused on all devices.' :
+      next.providerStatus ? next.providerStatus :
       next.researchError ? next.researchError :
       pending.length >= 24 ? '24 findings pending. Research resumes after the daily update.' :
-      next.researchChecked ? 'Last checked ' + new Date(next.researchChecked).toLocaleString() : 'Research starts while Sanjana is enabled.';
+      next.researchChecked ? 'Last checked ' + new Date(next.researchChecked).toLocaleString() : 'Cloudflare checks hourly, even with JaDE closed.';
     const latest = [...next.messages].reverse().find(message => message.role === 'assistant');
     bubble.hidden = hidden || !latest?.proactive || latest.id === next.seen || card.matches(':popover-open');
     bubble.textContent = latest?.text.slice(0,140) || '';
@@ -140,54 +134,40 @@ export function initCompanion() {
   async function refresh() {
     if (checking || active) return;
     checking = true;
-    const version = visibilityVersion;
     try {
       const next = await api();
-      if (version !== visibilityVersion) return;
+      status.textContent = next.offline ? 'Offline · showing saved updates' : '';
       render(next);
-      if (!hidden && state && Date.now() >= state.next && state.pending?.length) await talk('discover');
-      if (!hidden && state && state.researchNext !== undefined && Date.now() >= state.researchNext && (state.pending?.length || 0) < 24) {
-        await talk('research');
-        if (state && Date.now() >= state.next && state.pending?.length) await talk('discover');
-      }
     } catch (error) { status.textContent = (error as Error).message; }
     finally { checking = false; }
   }
-  async function talk(action: 'chat' | 'discover' | 'research') {
-    if (active && action === 'chat' && activeAction === 'research') { active.abort(); await finishedActive; }
+  async function talk(action: 'chat') {
     if (active || hidden) return;
-    const proactive = action !== 'chat';
     const message = input.value.trim();
-    if (!proactive && !message) return;
-    const controller = new AbortController(); active = controller; activeAction = action;
-    let finish!: () => void;
-    finishedActive = new Promise<void>(resolve => { finish = resolve; });
-    send.disabled = action !== 'research'; stop.hidden = false;
-    status.textContent = proactive ? '' : 'Thinking…';
-    if (action === 'research') researchStatus.textContent = 'Researching…';
+    if (!message) return;
+    const controller = new AbortController(); active = controller;
+    send.disabled = true; stop.hidden = false;
+    status.textContent = 'Thinking…';
     try {
-      render(await api({action, message: proactive ? undefined : message}, controller.signal));
-      if (!proactive && input.value.trim() === message) input.value = '';
+      render(await api({action, message}, controller.signal));
+      if (input.value.trim() === message) input.value = '';
       status.textContent = '';
     } catch (error) {
       status.textContent = controller.signal.aborted ? 'Stopped.' : (error as Error).message;
-    } finally { active = undefined; activeAction = ''; send.disabled = false; stop.hidden = true; if (state) render(state); finish(); }
+    } finally { active = undefined; send.disabled = false; stop.hidden = true; if (state) render(state); }
   }
-  async function setEnabled(enabled: boolean) {
-    const version = ++visibilityVersion;
-    active?.abort();
-    if (state) state.enabled = enabled;
-    bubble.hidden = true;
-    try { const next = await api({action:'enabled', enabled}); if (version === visibilityVersion) render(next); }
+  pause.addEventListener('click', async () => {
+    if (!state || pause.disabled) return;
+    pause.disabled = true;
+    try { render(await api({action:'settings',paused:!state.paused})); }
     catch (error) { status.textContent = (error as Error).message; }
-  }
+    finally { pause.disabled = false; }
+  });
   document.querySelector('#companion-form')!.addEventListener('submit', event => { event.preventDefault(); void talk('chat'); });
   input.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); void talk('chat'); }
   });
   stop.addEventListener('click', () => active?.abort());
-  document.querySelector('#companion-hide')!.addEventListener('click', () => { void setEnabled(false); });
-  restore.addEventListener('click', () => { void setEnabled(true); });
   card.addEventListener('toggle', () => { if (state) render(state); if (card.matches(':popover-open')) void refresh(); });
   window.addEventListener('pagehide', () => active?.abort());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });

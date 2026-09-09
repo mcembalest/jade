@@ -1,3 +1,4 @@
+import {companionRoute,scheduledCompanion} from './companion.js';
 import {projects} from './projects.js';
 import {remote} from './remote.js';
 import {backup,backupRoute} from './backups.js';
@@ -13,9 +14,12 @@ const selectFiles = `SELECT f.*, COALESCE((SELECT json_group_object(deviceId, re
 const decode = row => row ? {...row, acks: JSON.parse(row.acks || '{}')} : null;
 async function current(db, path) { return decode(await db.prepare(selectFiles + ' WHERE f.path=?').bind(path).first()); }
 export default {
-  async scheduled(controller,env,ctx) { ctx.waitUntil(backup(env)); },
+  async scheduled(controller,env,ctx) { ctx.waitUntil(controller.cron === "17 7 * * *" ? backup(env) : scheduledCompanion(env,Date.now())); },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if(url.pathname === "/v1/companion") {
+      try { return await companionRoute(request,env); } catch(e) { return json({error:e instanceof SyntaxError ? "Invalid JSON" : "Companion storage unavailable"},e instanceof SyntaxError?400:503); }
+    }
     if(url.pathname==='/v1/backup') {
       try { return await backupRoute(request,env,ctx); } catch { return json({error:'Backup status unavailable'},503); }
     }

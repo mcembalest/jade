@@ -11,3 +11,4 @@ sessions.md
 **/.jade-sync/
 
 /remote/__pycache__/
+/.wrangler/
