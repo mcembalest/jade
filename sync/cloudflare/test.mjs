@@ -57,6 +57,19 @@ test('remote relay requires separate agent credentials and preserves results',as
  assert.equal((await call('/v1/remote/result?id=remote-1')).result.content,'x');
  assert.equal((await call('/v1/remote/request',{id:'remote-1',action:'read',path:'other'})).status,409);
 });
+test('companion relay is authenticated, bounded, and preserves request identity',async()=>{
+ const request={id:'companion-one',action:'companion',companion:{action:'chat',message:'Hello Sanjana'}};
+ assert.equal((await call('/v1/remote/request',request,'wrong')).status,401);
+ assert.equal((await call('/v1/remote/request',request)).status,200);
+ assert.equal((await call('/v1/remote/request',request)).status,200);
+ assert.equal((await call('/v1/remote/request',{...request,companion:{action:'chat',message:'different'}})).status,409);
+ for(const companion of [{action:'shell'},{action:'chat',message:'a'.repeat(8001)},{action:'chat',message:'x',url:'https://bad.test'},{action:'enabled',enabled:'true'}])
+  assert.equal((await call('/v1/remote/request',{...request,companion})).status,400);
+ const jobs=await call('/v1/remote/agent',null,'agent-test-secret');
+ assert.deepEqual(jobs.requests.find(r=>r.id===request.id).companion,request.companion);
+ await call('/v1/remote/agent/result',{id:request.id,result:{companion:{enabled:true,messages:[{id:'one',role:'assistant',text:'Shared reply'}]}}},'agent-test-secret');
+ assert.equal((await call('/v1/remote/result?id='+request.id)).result.companion.messages[0].text,'Shared reply');
+});
 
 test('durable cloud projects: opt-in, offline edits, receipts, retries, isolation and history',async()=>{
  const agent='agent-test-secret';

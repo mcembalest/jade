@@ -59,3 +59,7 @@ The optional `LIVE_REMOTE_TEST` Xcode UI test uses an explicitly enabled isolate
 ## Optional persistent cloud projects
 
 The updated helper's **Cloud projects** menu separately opts selected folders into persistent Cloudflare storage. See [the project protocol and delivery contract](../sync/cloudflare/PROJECTS.md). This does not change direct **Save to Mac** or automatically upload `first` or other enabled folders. The phone entry point is **Mac files → Cloud projects**.
+
+## Mobile Sanjana
+
+The bridge permits a bounded `companion` request alongside file operations. It forwards only GET or allowlisted JSON actions to the fixed local `http://127.0.0.1:7339/companion` endpoint. Phone requests cannot select a URL, command, working directory, or model credentials. Chat/research run in a bounded separate worker pool so file requests keep moving. A durable receipt is reserved before forwarding; a helper interruption returns an uncertain outcome instead of replaying the model request. Completed results are delivered even after the relay's initial pickup deadline, and the phone polls long enough for the desktop's three-minute chat limit. Existing one-hour relay cleanup remains; conversation history itself remains in the desktop companion store.

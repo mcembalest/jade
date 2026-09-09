@@ -26,6 +26,7 @@ enum PairingKeychain {
             TabView {
                 LibraryView(store: store).tabItem { Label("Notes", systemImage:"note.text") }
                 MacHome().tabItem { Label("Mac files", systemImage:"desktopcomputer") }
+                SanjanaView().tabItem { Label("Sanjana",systemImage:"heart") }
             }
                 .tint(Color(red: 0.08, green: 0.40, blue: 0.29))
                 .task {
