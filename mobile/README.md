@@ -45,5 +45,6 @@ manual discovery action. Legacy cached drafts and receipts remain on disk.
 Cloudflare owns hourly research opportunities and the daily 8pm America/New_York
 publication. **Pause research everywhere** is shared; hiding the character and
 stopping animation are local preferences. Desktop chat is excluded from the feed.
-Paid research currently awaits AI Gateway activation; the UI reports that status.
+Autonomous research awaits an OpenAI/Codex subscription-backed cloud runtime;
+the UI reports that status. Other providers and separate API billing are not enabled.
 See [Sanjana architecture and setup](../engine/web/companion/README.md).

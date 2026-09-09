@@ -81,7 +81,8 @@ export async function scheduledCompanion(env,now=Date.now(),provider=researchPro
  try {finding=await provider(env,reserved.state,now);}catch {error='Research could not finish. No automatic retry; the next hourly opportunity will check again.';}
  await changeState(env.DB,s=>{
   if(s.run?.id!==id)return false;
-  s.run.status=error?'failed':'complete';s.researchError=provider===researchProvider&&providerStatus(env)||error;
+  const blocked=provider===researchProvider&&providerStatus(env);
+  s.run.status=blocked?'blocked':error?'failed':'complete';s.researchError=blocked||error;
   if(!error&&finding?.text&&finding.text.length<=600&&finding.sources?.length&&s.pending.length<24) {
    const sources=finding.sources.slice(0,3).filter(v=>canonicalURL(v.url));
    const urls=sources.map(v=>canonicalURL(v.url));

@@ -28,50 +28,35 @@ cloud state for offline reading. The mobile feed excludes ordinary chat messages
 
 Desktop chat remains an explicit Mac feature using the signed-in Codex runtime.
 It reads the cloud profile/history and appends the reply to that same cloud history.
-It requires the Mac and cloud online, and is independent of paid cloud research.
-The bounded desktop prompt uses at most 40 messages / 64KB; cloud research uses at
-most 12 messages / 12,000 characters and bounded pending context. This is not
-unlimited long-term memory.
+It requires the Mac and cloud online. The bounded desktop prompt uses at most
+40 messages / 64KB. This is not unlimited long-term memory.
 
-## AI and live search: activation still required
+## OpenAI/Codex subscription requirement
 
-The deployed scheduler and shared reads are active, but **paid research is disabled**
-(`SANJANA_AI_ENABLED=false`). There is no production AI success claim yet.
+**Sanjana must use the user's OpenAI/Codex subscription.** Another provider or a
+separately billed API is not an approved substitute. Desktop chat already uses
+the signed-in Codex runtime and live search on the Mac.
 
-The isolated adapter in `sync/cloudflare/companion-provider.js` targets Anthropic
-Haiku 4.5 through Cloudflare AI Gateway's AI binding. Anthropic handles both inference
-and live web search. A request permits two searches, one fetched page (3,000 content
-tokens), 1,200 output tokens and a 90-second local wait; final findings are limited
-to 600 characters and three original citation URLs. Incomplete/uncited outputs are
-rejected without continuation or retry. Publication makes no AI call.
+The Cloudflare scheduler, shared history and daily publication are deployed, but
+**autonomous research is not connected**. The cloud provider module reports this
+blocker and makes no AI request. There is no AI binding or paid-provider activation
+flag. An hourly opportunity is recorded as blocked, never as successful research;
+existing findings remain available for scheduled publication.
 
-To activate: create authenticated gateway `jade-sanjana`, disable request/response
-logging and retries, configure a monthly spend limit (proposed $10), fund Unified
-Billing credits, and then set `SANJANA_AI_ENABLED=true` and deploy. Verify one sourced
-scheduled result and the gateway's enforced spending rule before claiming it active.
-Existing Wrangler OAuth can deploy Workers but returned 403 when reading gateway
-settings, so gateway setup requires dashboard access or an appropriately scoped
-Cloudflare credential. Never put that credential in the repository.
+Official [Codex authentication documentation](https://developers.openai.com/codex/auth/)
+supports ChatGPT sign-in on remote/headless machines using device authentication.
+It distinguishes that subscription access from API-key billing. A Codex runtime
+hosted in Cloudflare (for example, in a container) is therefore a candidate path;
+it still needs implementation, authenticated runtime persistence and validation.
+A direct subscription-authenticated Worker inference endpoint has not been
+established. Subscription-backed cloud execution is not ruled out.
 
-As checked September 8, 2026, Cloudflare Unified Billing adds a 5% credit-purchase
-fee and passes through provider rates. Haiku 4.5 is $1/million input tokens and
-$5/million output tokens; web search is $10/1,000 searches, plus text tokens.
-Two searches every hour would alone cost about $14.40 in a 30-day month; a $10
-spending cap therefore can stop research before month end. The limit must be
-configured in AI Gateway; it is **not currently configured or a code-enforced
-monetary cap**. Daily publication, cached reading and pause continue without credits.
-
-Cloudflare's native Web Search binding was also investigated. The installed
-Wrangler supports it, but a real query returned `account_disabled` (7078). It is
-not usable for this account today. AI Search indexes a configured corpus; it is not
-a substitute for general live discovery. Browser rendering alone does not search.
-A Codex subscription/sign-in is not a Worker execution credential.
-
-References:
-- [Cloudflare web-search providers](https://developers.cloudflare.com/ai-gateway/usage/web-search/)
-- [Unified Billing and credit setup](https://developers.cloudflare.com/ai-gateway/features/unified-billing/)
-- [Provider pricing](https://platform.claude.com/docs/en/about-claude/pricing)
-- [Native Web Search introduction](https://github.com/cloudflare/workers-sdk/releases/tag/wrangler%404.96.0)
+Do not configure AI Gateway credits or native Cloudflare Web Search to activate
+this implementation. Prefer a dedicated device-auth login for a future cloud
+runtime; never expose login credentials or substitute paid API credentials.
+No autonomous Mac scheduler or client-triggered research is enabled.
+The target remains bounded, sourced research (about two searches and one page per
+hour), up to 24 pending findings, and one daily update around 8pm New York time.
 
 ## Migration, deployment and recovery
 

@@ -200,17 +200,19 @@ c=sqlite3.connect(p/'restored.sqlite');assert c.execute('SELECT document FROM co
  }finally{await rm(folder,{recursive:true,force:true});}
 });
 
-test('provider adapter enforces search/page/output budgets and rejects uncited text',async()=>{
- const {researchProvider,MODEL}=await import('./companion-provider.js');let calls=0;
- const state={profile:'Original profile',messages:[],pending:[]};
- const env={SANJANA_AI_ENABLED:'true',SANJANA_GATEWAY:'test',AI:{run:async(model,input,options)=>{
-  calls++;assert.equal(model,MODEL);assert.equal(input.max_tokens,1200);
-  assert.equal(input.tools[0].max_uses,2);assert.equal(input.tools[1].max_uses,1);assert.equal(input.tools[1].max_content_tokens,3000);
-  assert.equal(options.gateway.collectLog,false);assert.equal(options.gateway.skipCache,true);
-  return {stop_reason:'end_turn',content:[{type:'text',text:'One sourced discovery',citations:[{url:'https://example.com/original',title:'Original'}]}]};
- }}};
- assert.equal(await researchProvider({...env,SANJANA_AI_ENABLED:'false'},state,0),null);assert.equal(calls,0);
- assert.equal((await researchProvider(env,state,0)).sources[0].url,'https://example.com/original');assert.equal(calls,1);
- env.AI.run=async()=>({stop_reason:'end_turn',content:[{type:'text',text:'Unsourced'}]});await assert.rejects(researchProvider(env,state,0));
- env.AI.run=async()=>({stop_reason:'pause_turn',content:[]});await assert.rejects(researchProvider(env,state,0));
+test('subscription requirement blocks cloud AI without fallback or false success',async()=>{
+ const {researchProvider,providerStatus}=await import('./companion-provider.js');
+ const {scheduledCompanion,readState,changeState}=await import('./companion.js');
+ const db=await mf.getD1Database('DB');let calls=0;
+ // Even stale flags/bindings cannot reactivate the removed paid provider.
+ const env={DB:db,SANJANA_AI_ENABLED:'true',SANJANA_GATEWAY:'legacy',AI:{run:async()=>{calls++;throw Error('must not call');}}};
+ assert.match(providerStatus(env),/OpenAI\/Codex subscription/);
+ await assert.rejects(researchProvider(env,{},0),/not connected/);
+ const now=Date.parse('2026-09-18T16:00:00Z');
+ await changeState(db,s=>{s.paused=false;s.researchNext=0;s.pending=[{text:'Keep finding',sources:[{url:'https://example.com/kept'}]}];});
+ await scheduledCompanion(env,now);
+ const state=(await readState(db)).state;
+ assert.equal(calls,0);assert.equal(state.run.status,'blocked');
+ assert.equal(state.pending[0].text,'Keep finding');assert.equal(state.researchNext,now+3600000);
+ assert.match((await call('/v1/companion')).providerStatus,/OpenAI\/Codex subscription/);
 });
