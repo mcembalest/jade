@@ -289,3 +289,24 @@ test('pausing an in-flight daily run retains its report without publishing until
  state=await call('/v1/companion');assert.equal(state.messages.filter(m=>m.text==='Held report').length,1);
  assert.equal(state.queuedDaily,undefined);
 });
+
+test('cloud device login retains credentials after the client leaves',async()=>{
+ const source=(await readFile('runtime/container.js','utf8')).replace("import {Container} from '@cloudflare/containers';",`class Container {
+  constructor(){this.saved=new Map();this.ctx={storage:{get:async k=>this.saved.get(k),put:async(k,v)=>this.saved.set(k,v)}};this.schedules=[];this.loggedIn=false;}
+  async containerFetch(url){return Response.json(url.endsWith('/login/start')?{result:{started:true}}:{result:{runtimeVersion:2,sandboxReady:true,connected:this.loggedIn,pending:!this.loggedIn},auth:this.loggedIn?{refresh_token:'test-only'}:null});}
+  deleteSchedules(){this.schedules=[];}
+  async schedule(delay,callback,payload){this.schedules.push({delay,callback,payload});}
+  async destroy(){}
+ }`);
+ const {ResearchContainer}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+ const runtime=new ResearchContainer();
+ const started=await runtime.fetch(new Request('https://runtime/login/start',{method:'POST',body:'{}'}));
+ assert.equal((await started.json()).started,true);assert.equal(runtime.schedules.length,1);
+ runtime.loggedIn=true;
+ // Alarm callback executes with no open Mac, phone, or browser request.
+ await runtime.captureLogin(runtime.schedules[0].payload);
+ assert.equal(runtime.saved.get('codex-auth').refresh_token,'test-only');
+ const status=await runtime.fetch(new Request('https://runtime/login/status',{method:'POST',body:'{}'}));
+ const publicStatus=await status.json();assert.equal(publicStatus.connected,true);assert.equal(publicStatus.auth,undefined);
+ assert.equal(JSON.stringify(publicStatus).includes('test-only'),false);
+});
