@@ -216,3 +216,76 @@ test('subscription requirement blocks cloud AI without fallback or false success
  assert.equal(state.pending[0].text,'Keep finding');assert.equal(state.researchNext,now+3600000);
  assert.match((await call('/v1/companion')).providerStatus,/OpenAI\/Codex subscription/);
 });
+
+test('companion notebook belongs to the user; stale settings cannot replace newer memory',async()=>{
+ const n={name:'Ada',profile:'Curious and precise',instructions:'Find new astronomy papers',memory:'Track instrument updates',timezone:'America/New_York',hour:20,avatar:''};
+ const initial=await call('/v1/companion');const baseRevision=initial.notebook.revision;
+ const edit={action:'notebook',id:'notebook-test',baseRevision,notebook:n};
+ let r=await call('/v1/companion',edit);assert.equal(r.status,200);assert.equal(r.notebook.name,'Ada');
+ assert.equal((await call('/v1/companion',edit)).status,200);
+ assert.equal((await call('/v1/companion',{...edit,id:'stale-notebook',notebook:{...n,memory:'stale'}})).status,409);
+ assert.equal((await call('/v1/companion',{...edit,notebook:{...n,name:'different'}})).status,409);
+ for(const patch of [{hour:24},{timezone:'not-a-zone'},{avatar:'javascript:bad'},{profile:42}])assert.equal((await call('/v1/companion',{...edit,id:'invalid-notebook',notebook:{...n,...patch}})).status,400);
+ assert.equal((await call('/v1/companion?history=1',null,'wrong')).status,401);
+ assert.equal((await call('/v1/companion?history=1&before=no')).status,400);
+});
+
+test('permanent archive retains findings and daily reports beyond a trimmed feed, with stable pagination',async()=>{
+ const {changeState}=await import('./companion.js');const db=await mf.getD1Database('DB');
+ await changeState(db,s=>{s.messages=Array.from({length:130},(_,i)=>({id:'archive-daily-'+i,role:'assistant',text:'Report '+i,proactive:true,foundAt:i+1}));s.pending=[{id:'archived-finding',text:'Original finding',sources:[{url:'https://example.com/original'}],foundAt:5}];});
+ await changeState(db,s=>{s.messages=s.messages.slice(-100);s.pending=[];});
+ let page=await call('/v1/companion?history=1&kind=research');let entries=[...page.entries];
+ while(page.before){page=await call('/v1/companion?history=1&kind=research&before='+page.before);entries.push(...page.entries);}
+ assert.equal(entries.filter(e=>e.id.startsWith('message-archive-daily-')).length,130);
+ assert(entries.some(e=>e.document.text==='Original finding'));
+ assert.equal(new Set(entries.map(e=>e.seq)).size,entries.length);
+ const result=await backup({DB:db,BACKUPS:await mf.getR2Bucket('BACKUPS')});
+ const bucket=await mf.getR2Bucket('BACKUPS');const manifest=await (await bucket.get(result.manifest)).json();
+ assert(manifest.chunks.some(c=>c.table==='companion_archive'));
+ const folder=await mkdtemp(join(tmpdir(),'jade-archive-'));
+ try {
+  await writeFile(join(folder,'manifest.json'),JSON.stringify(manifest));
+  for(const part of manifest.chunks)await writeFile(join(folder,part.key.replaceAll('/','_')),await (await bucket.get(part.key)).text());
+  execFileSync('python3',['-c',`import importlib.util,json,pathlib,sqlite3
+spec=importlib.util.spec_from_file_location('restore','../remote/restore-cloud-backup.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+f=pathlib.Path(${JSON.stringify(folder)});target=f/'restored.sqlite';manifest=json.loads((f/'manifest.json').read_text())
+m.restore(manifest,lambda key:(f/key.replace('/','_')).read_bytes(),target)
+db=sqlite3.connect(target);assert db.execute("SELECT COUNT(*) FROM companion_archive WHERE id LIKE 'message-archive-daily-%'").fetchone()[0]==130
+`.replace("'../remote/", "'../../remote/")],{cwd:process.cwd()});
+ } finally{await rm(folder,{recursive:true,force:true});}
+});
+
+test('daily cloud runner reads the permanent history, persists memory, and reserves once across overlapping ticks',async()=>{
+ const {changeState,scheduledDaily,notebook}=await import('./companion.js');const db=await mf.getD1Database('DB');
+ await changeState(db,s=>{s.paused=false;s.dailyResearchDate='';s.notebook={...notebook(s),hour:20};});
+ const now=Date.parse('2026-10-02T00:00:00Z');let calls=0;
+ const run=async input=>{calls++;assert(input.history.some(e=>e.document.text==='Report 0'));assert.equal(input.notebook.name,'Ada');return {report:'Today’s astronomy report',memory:'Remember this telescope',findings:[{text:'A new observation',sources:[{title:'Paper',url:'https://example.com/paper'}]}]};};
+ await Promise.all([scheduledDaily({DB:db},now,run),scheduledDaily({DB:db},now,run)]);
+ assert.equal(calls,1);let state=(await call('/v1/companion')).notebook;assert.equal(state.memory,'Remember this telescope');
+ await scheduledDaily({DB:db},now+3600000,run);assert.equal(calls,1);
+ // Preserve a concurrently edited brief and memory; archive the runner's proposed memory.
+ await scheduledDaily({DB:db},now+86400000,async()=>{await changeState(db,s=>{s.notebook={...notebook(s),memory:'User correction',revision:'user-correction'};});return {report:'Second report',memory:'Agent proposal',findings:[]};});
+ assert.equal((await call('/v1/companion')).notebook.memory,'User correction');
+ assert.equal((await db.prepare("SELECT count(*) AS n FROM companion_archive WHERE id LIKE 'memory-proposal-%'").first()).n,1);
+ await scheduledDaily({DB:db},now+2*86400000,async()=>{throw new Error('Runtime unavailable')});
+ assert.equal((await call('/v1/companion')).run.status,'failed');
+ assert.equal((await call('/v1/companion')).notebook.memory,'User correction');
+});
+
+test('pausing an in-flight daily run retains its report without publishing until resumed',async()=>{
+ const {changeState,scheduledDaily}=await import('./companion.js');const db=await mf.getD1Database('DB');
+ const now=Date.parse('2026-10-10T00:00:00Z');
+ await changeState(db,s=>{s.paused=false;});
+ await scheduledDaily({DB:db},now,async()=>{
+  await changeState(db,s=>{s.paused=true;});
+  return {report:'Held report',memory:'Retained memory',findings:[]};
+ });
+ let state=await call('/v1/companion');
+ assert.equal(state.queuedDaily.text,'Held report');
+ assert(!state.messages.some(m=>m.text==='Held report'));
+ assert.equal((await db.prepare("SELECT COUNT(*) AS n FROM companion_archive WHERE json_extract(document,'$.text')='Held report'").first()).n,1);
+ await changeState(db,s=>{s.paused=false;});
+ await scheduledDaily({DB:db},now,()=>{throw new Error('must not repeat')});
+ state=await call('/v1/companion');assert.equal(state.messages.filter(m=>m.text==='Held report').length,1);
+ assert.equal(state.queuedDaily,undefined);
+});

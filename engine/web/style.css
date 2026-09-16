@@ -149,3 +149,11 @@ dialog::backdrop { background:#17201b4a; }
 .preview button { flex:none; }
 
 .preview-status { margin:0; padding:8px 12px; color:#863418; background:#fff2e8; font-size:13px; }
+
+#companion-notebook-dialog { width: min(760px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; }
+#companion-notebook-form { display: grid; gap: 12px; }
+#companion-notebook-form label { display: grid; gap: 5px; }
+#companion-notebook-form textarea { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+#companion-history .companion-message { margin-block: 12px; }
+#companion-sprite.custom-avatar { background-size: contain; background-position: center !important; background-repeat: no-repeat; }
+#companion-sprite.initials { display: grid; place-items: center; font-size: 28px; background-image: none; }

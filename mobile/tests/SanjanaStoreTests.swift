@@ -3,6 +3,7 @@ import Foundation
 final class SanjanaProtocol: URLProtocol {
     static var reads=0, writes=0
     static var offline=false
+    static var statusCode=200
     static var state:[String:Any]=["enabled":true,"paused":false,"messages":[["id":"desktop","role":"assistant","text":"Shared update","proactive":true]],"pending":[["text":"A discovery","sources":[["title":"Source","url":"https://example.com"]]]],"next":0.0,"researchNext":0.0]
     override class func canInit(with request:URLRequest)->Bool { true }
     override class func canonicalRequest(for request:URLRequest)->URLRequest { request }
@@ -10,7 +11,7 @@ final class SanjanaProtocol: URLProtocol {
         precondition(request.url!.path=="/v1/companion","must bypass Mac relay")
         if Self.offline { client?.urlProtocol(self,didFailWithError:URLError(.notConnectedToInternet));return }
         if request.httpMethod=="POST" { Self.writes += 1;Self.state["paused"]=true } else { Self.reads += 1 }
-        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:200,httpVersion:nil,headerFields:nil)!,cacheStoragePolicy:.notAllowed)
+        client?.urlProtocol(self,didReceive:HTTPURLResponse(url:request.url!,statusCode:Self.statusCode,httpVersion:nil,headerFields:nil)!,cacheStoragePolicy:.notAllowed)
         client?.urlProtocol(self,didLoad:try! JSONSerialization.data(withJSONObject:Self.state));client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}
@@ -33,6 +34,18 @@ final class SanjanaProtocol: URLProtocol {
         check(store.draft=="old draft" && store.pending,"preserve legacy draft and receipt")
         await store.act(SanjanaAction(action:"research"));check(SanjanaProtocol.writes==0,"reject old manual research")
         await store.act(SanjanaAction(action:"settings",paused:true));check(store.state?.paused==true && SanjanaProtocol.writes==1,"explicit shared pause")
+        let n=CompanionNotebook(name:"Ada",profile:"Astronomer",instructions:"Find astronomy papers",memory:"Previous discoveries",timezone:"America/New_York",hour:20,avatar:"",revision:"first")
+        SanjanaProtocol.state["notebook"]=try JSONSerialization.jsonObject(with:JSONEncoder().encode(n))
+        await store.refresh()
+        var draft=store.notebook;draft.name="My character";store.editNotebook(draft)
+        SanjanaProtocol.statusCode=409;await store.saveNotebook()
+        check(store.notebook.name=="My character" && store.status.contains("another device"),"conflict preserves editable draft")
+        store=SanjanaStore(directory:directory,session:session,pairing:pair)
+        check(store.notebook.name=="My character","notebook draft survives restart")
+        SanjanaProtocol.statusCode=200;SanjanaProtocol.offline=true;await store.reloadNotebook()
+        check(store.notebook.name=="My character","failed reload does not erase draft")
+        SanjanaProtocol.offline=false;await store.reloadNotebook()
+        check(store.notebook.name=="Ada","explicit reload recovers shared version")
         SanjanaProtocol.offline=true
         store=SanjanaStore(directory:directory,session:session,pairing:pair)
         await store.refresh();check(store.state?.messages?.first?.text=="Shared update","offline cache")

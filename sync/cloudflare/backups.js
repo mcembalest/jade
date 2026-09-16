@@ -13,13 +13,14 @@ export async function backup(env, now=new Date()) {
    env.DB.prepare('SELECT * FROM acknowledgements ORDER BY path,deviceId'),
    env.DB.prepare('SELECT path,revision FROM files ORDER BY path'),
    env.DB.prepare('SELECT project,path,revision,macRevision,macIssue FROM project_files ORDER BY project,path'),
-   env.DB.prepare("SELECT sql FROM sqlite_schema WHERE type IN ('table','index','trigger') AND name IN ('revisions','files','acknowledgements','revision_applied','projects','project_files','project_revisions','project_history_path','project_revision_applied','companion_state') ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END"),
-   env.DB.prepare('SELECT * FROM companion_state ORDER BY id')
+   env.DB.prepare("SELECT sql FROM sqlite_schema WHERE type IN ('table','index','trigger') AND name IN ('revisions','files','acknowledgements','revision_applied','projects','project_files','project_revisions','project_history_path','project_revision_applied','companion_state','companion_archive','companion_archive_kind','companion_archive_insert','companion_archive_update') ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END"),
+   env.DB.prepare('SELECT * FROM companion_state ORDER BY id'),
+   env.DB.prepare('SELECT COALESCE(MAX(seq),0) AS last FROM companion_archive')
   ]);
   const manifest={format:'jade-d1-backup-v1',createdAt:startedAt,retentionDays:30,
    projects:snapshot[2].results,acknowledgements:snapshot[3].results,noteHeads:snapshot[4].results,projectHeads:snapshot[5].results,
    schema:snapshot[6].results.map(r=>r.sql),companion:snapshot[7].results,chunks:[]};
-  for(const [index,table] of ['revisions','project_revisions'].entries()) {
+  for(const [index,table] of [[0,'revisions'],[1,'project_revisions'],[8,'companion_archive']]) {
    const last=snapshot[index].results[0].last;let cursor=0,part=0;
    while(cursor<last) {
     // Eight maximum-size notes fit safely in a Worker, even with JSON escaping.

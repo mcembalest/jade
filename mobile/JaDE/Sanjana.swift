@@ -47,10 +47,14 @@ struct SanjanaView: View {
             ScrollView {
                 VStack(alignment:.leading,spacing:20) {
                     VStack(spacing:6) {
-                        if !hidden { SanjanaSprite(still:still) }
+                        if !hidden {
+                            if store.state?.notebook?.avatar=="sanjana" {SanjanaSprite(still:still)}
+                            else if let avatar=store.state?.notebook?.avatar,let encoded=avatar.split(separator:",").last,let data=Data(base64Encoded:String(encoded)),let image=UIImage(data:data) {Image(uiImage:image).resizable().scaledToFit().frame(width:144,height:156)}
+                            else {Text(String((store.state?.notebook?.name ?? "Companion").prefix(2))).font(.largeTitle).frame(height:100)}
+                        }
                         Text("A LITTLE COMPANY").font(.caption.weight(.semibold)).tracking(2)
-                        Text("Sanjana’s corner").font(.largeTitle.weight(.semibold))
-                        Text("Fashion, rabbit holes, and something good in the city.").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        Text(store.state?.notebook?.name.isEmpty == false ? store.state!.notebook!.name : "Your companion").font(.largeTitle.weight(.semibold))
+                        Text("Research shaped by you.").font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }.frame(maxWidth:.infinity).padding(.vertical)
                     Text(store.storageError ?? store.status).font(.footnote).foregroundStyle(.secondary).accessibilityIdentifier("Sanjana status")
                     if store.busy { ProgressView() }
@@ -65,12 +69,13 @@ struct SanjanaView: View {
                             Text("Shared findings stay here until the daily update.").font(.caption).foregroundStyle(.secondary)
                         }.padding(.top,8)
                     }
-                    Text("Updates from Sanjana").font(.title2.weight(.semibold))
+                    NavigationLink("Character, research & history") {CompanionNotebookView(store:store)}
+                    Text("Daily updates").font(.title2.weight(.semibold))
                     ForEach(Array((store.state?.messages ?? []).filter { $0.proactive == true }.reversed().enumerated()),id:\.offset) { _,message in row(message) }
                     if !(store.state?.messages ?? []).contains(where:{$0.proactive == true}) { Text("Her updates will appear here as she finds things to share.").foregroundStyle(.secondary) }
-                    Text("Cloudflare looks for discoveries hourly and shares a daily update around 8pm America/New_York, even with both apps closed and your Mac off. Saved updates are available offline.").font(.caption).foregroundStyle(.secondary)
+                    Text("Daily research runs server-side when the cloud runtime is connected. Saved updates remain available offline.").font(.caption).foregroundStyle(.secondary)
                 }.padding()
-            }.background(Color(uiColor:.systemGroupedBackground)).navigationTitle("Sanjana").navigationBarTitleDisplayMode(.inline)
+            }.background(Color(uiColor:.systemGroupedBackground)).navigationTitle(store.state?.notebook?.name.isEmpty == false ? store.state!.notebook!.name : "Companion").navigationBarTitleDisplayMode(.inline)
                 .toolbar { Menu {
                     Button("Refresh updates") { Task { await store.refresh() } }.disabled(store.busy)
                     Toggle("Still animation",isOn:$still)
@@ -88,12 +93,52 @@ struct SanjanaView: View {
     }
     private func row(_ message:SanjanaMessage) -> some View {
         VStack(alignment:.leading,spacing:8) {
-            Text(message.role=="user" ? "You" : "Sanjana").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(message.role=="user" ? "You" : store.state?.notebook?.name ?? "Companion").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             if let date=message.foundAt { Text(Date(timeIntervalSince1970:date/1000).formatted()).font(.caption).foregroundStyle(.secondary) }
             Text(message.text).textSelection(.enabled)
             ForEach(Array((message.sources ?? []).enumerated()),id:\.offset) { _,source in
                 if let url=URL(string:source.url),["https","http"].contains(url.scheme ?? "") { Link(source.title,destination:url).font(.footnote) }
             }
         }.frame(maxWidth:.infinity,alignment:.leading).padding().background(message.role=="user" ? Color.green.opacity(0.08) : Color(uiColor:.secondarySystemGroupedBackground),in:RoundedRectangle(cornerRadius:16))
+    }
+}
+
+struct CompanionNotebookView: View {
+    @State private var confirmReload=false
+    @ObservedObject var store:SanjanaStore
+    private func text(_ key:WritableKeyPath<CompanionNotebook,String>)->Binding<String> {
+        Binding(get:{store.notebook[keyPath:key]},set:{value in var n=store.notebook;n[keyPath:key]=value;store.editNotebook(n)})
+    }
+    var body: some View {
+        Form {
+            Section("Your companion") {
+                TextField("Name",text:text(\.name))
+                Text("Character and personality");TextEditor(text:text(\.profile)).frame(minHeight:100)
+                Text("Research instructions");TextEditor(text:text(\.instructions)).frame(minHeight:100)
+                Text("Working memory");TextEditor(text:text(\.memory)).frame(minHeight:100)
+                TextField("Time zone",text:text(\.timezone)).textInputAutocapitalization(.never)
+                Stepper("Daily research hour: \(store.notebook.hour)",value:Binding(get:{store.notebook.hour},set:{var n=store.notebook;n.hour=$0;store.editNotebook(n)}),in:0...23)
+                Text("Character images can be uploaded from desktop settings.").font(.caption)
+                Button("Save companion") {Task {await store.saveNotebook()}}.disabled(store.busy)
+                Button("Reload saved settings") {confirmReload=true}.disabled(store.busy)
+                Text(store.status).font(.footnote)
+            }
+            Section("Research history") {
+                Button("Refresh history") {Task {await store.loadHistory(reset:true)}}.disabled(store.busy)
+                ForEach(store.history,id:\.seq) {entry in
+                    VStack(alignment:.leading,spacing:8) {
+                        Text(Date(timeIntervalSince1970:entry.foundAt/1000).formatted()).font(.caption)
+                        Text(entry.document.text).textSelection(.enabled)
+                        ForEach(Array((entry.document.sources ?? []).enumerated()),id:\.offset) {_,source in
+                            if let url=URL(string:source.url),["https","http"].contains(url.scheme ?? "") {Link(source.title,destination:url)}
+                        }
+                    }
+                }
+                if store.historyBefore != nil {Button("Older history") {Task {await store.loadHistory()}}.disabled(store.busy)}
+            }
+        }.navigationTitle("Companion settings")
+        .confirmationDialog("Replace this phone draft with the saved companion settings?",isPresented:$confirmReload,titleVisibility:.visible) {
+            Button("Replace phone draft",role:.destructive) {Task {await store.reloadNotebook()}}
+        }
     }
 }

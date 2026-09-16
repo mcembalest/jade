@@ -163,7 +163,7 @@ test('error controls fit the minimum supported window width', async ({ page }) =
   }
 });
 
-test('local SVG plots render inside the sandboxed Markdown preview', async ({ page, appURL, workspace }) => {
+test('local SVG plots render inside the sandboxed Markdown preview', async ({ page, appURL, workspace, browserName }) => {
   await writeFile(join(workspace, 'plot.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"><rect width="200" height="100" fill="#50dfbd"/></svg>');
   await writeFile(join(workspace, 'README.md'), '# Plot workspace\n\n![Measured plot](plot.svg)\n');
   await page.goto(appURL);
@@ -171,5 +171,5 @@ test('local SVG plots render inside the sandboxed Markdown preview', async ({ pa
   const plot = page.frameLocator('#view-frame').getByRole('img', { name: 'Measured plot' });
   await expect(plot).toBeVisible();
   await expect.poll(() => plot.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBe(200);
-  await expect(page.locator('#view-frame')).toHaveAttribute('sandbox', 'allow-same-origin allow-scripts');
+  await expect(page.locator('#view-frame')).toHaveAttribute('sandbox', browserName === 'webkit' ? 'allow-same-origin allow-scripts' : 'allow-same-origin');
 });

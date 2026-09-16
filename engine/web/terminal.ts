@@ -1,12 +1,12 @@
 interface Terminals { apps: {name: string; path: string}[]; selected: string; overridden: boolean }
 
-export function initTerminals(body: HTMLElement, status: HTMLElement) {
+export function initTerminals(body: HTMLElement, status: HTMLElement, beforeOpen: () => Promise<boolean> = async () => true) {
   const terminalToggle = document.querySelector<HTMLButtonElement>("#terminal-toggle")!;
   const terminalSelect = document.querySelector<HTMLSelectElement>("#terminal-select")!;
   const notice = document.querySelector<HTMLElement>('#terminal-notice')!;
   function report(message: string) { status.textContent = message; notice.hidden = !message; }
   document.querySelector<HTMLButtonElement>('#dismiss-terminal')!.addEventListener('click', () => report(''));
-  const request = (url: string, options?: RequestInit) => fetch(url, {...options, signal:AbortSignal.timeout(10000)});
+  const request = (url: string, options?: RequestInit) => fetch(url, {...options, signal:AbortSignal.timeout(35000)});
   function showTerminals(result: Terminals) {
     terminalSelect.replaceChildren(...result.apps.map(app => new Option(app.name, app.path)));
     terminalSelect.value = result.selected;
@@ -43,6 +43,7 @@ export function initTerminals(body: HTMLElement, status: HTMLElement) {
     terminalToggle.disabled = true;
     terminalToggle.textContent = "Opening…";
     try {
+      if (!await beforeOpen()) { report('Save or resolve the current file before opening its terminal.'); return; }
       const data = new FormData(); data.set("jade", body.dataset.jade!);
       const response = await request("/terminal", {method:"POST", body:data});
       const result: {message: string; error?: string} = await response.json();

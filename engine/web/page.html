@@ -14,7 +14,7 @@
     <button id="search-toggle" type="button">Search</button>
     <div class="identity">{{if ne .Workspace.Path "."}}<a id="workspace-root" href="/" title="Back to root workspace">JADE</a>{{else}}<span class="brand">JADE</span>{{end}}<span class="project" title="{{.Workspace.Title}}">{{.Workspace.Title}}</span><span class="path" title="{{.Workspace.Path}}">{{.Workspace.Path}}</span></div>
     <div class="header-actions">
-      <button id="companion-restore" type="button" hidden>Show Sanjana</button>
+      <button id="companion-restore" type="button" hidden>Show Companion</button>
       <select id="terminal-select" aria-label="Terminal app" title="Terminal app"><option>Terminal</option></select>
       <button id="terminal-toggle" type="button">Open terminal</button>
     </div>
@@ -81,26 +81,45 @@
       <div class="dialog-actions"><button id="new-file-cancel" type="button">Cancel</button><button type="submit">Create file</button></div>
     </form>
   </dialog>
+  <dialog id="companion-notebook-dialog" aria-label="Companion settings and history">
+    <div class="search-heading"><h2>Your companion</h2><button id="companion-notebook-close" type="button">Close</button></div>
+    <form id="companion-notebook-form">
+      <label>Name <input name="name" maxlength="80" autocomplete="off"></label>
+      <label>Character and personality <textarea name="profile" rows="5" maxlength="20000" placeholder="Describe who your companion is, their voice, interests and boundaries."></textarea></label>
+      <label>Research instructions <textarea name="instructions" rows="5" maxlength="20000" placeholder="In your own words, what should they look for each day?"></textarea></label>
+      <label>Working memory <textarea name="memory" rows="5" maxlength="100000" placeholder="Persistent notes your companion can read and update each day."></textarea></label>
+      <label>Time zone <input name="timezone" placeholder="America/New_York" required></label>
+      <label>Daily research hour (0–23) <input name="hour" type="number" min="0" max="23" required></label>
+      <label>Character image <input id="companion-avatar-file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <button id="companion-avatar-clear" type="button">Use initials</button>
+      <p id="companion-notebook-status" role="status"></p>
+      <button type="submit">Save companion</button><button id="companion-notebook-reload" type="button">Reload saved settings</button>
+    </form>
+    <h3>Cloud runtime</h3><p>Connect your Codex subscription once on the server. Research then runs with both devices off.</p><button id="companion-runtime-login" type="button">Connect Codex subscription</button><button id="companion-runtime-check" type="button">Check connection</button><p id="companion-runtime-status" role="status"></p>
+    <h3>Research history</h3><p>Findings and daily reports are retained beyond the recent feed. Working-memory changes are versioned.</p>
+    <div id="companion-history"></div><button id="companion-history-more" type="button">Load history</button>
+  </dialog>
   <div id="companion-dock">
-    <section id="companion-card" aria-label="Sanjana’s corner" popover="auto">
-      <div class="companion-heading"><div><span class="companion-eyebrow">A LITTLE COMPANY</span><h2>Sanjana’s corner</h2></div><button id="companion-close" type="button" autofocus aria-label="Close Sanjana’s corner">×</button></div>
-      <p class="companion-intro">Fashion, rabbit holes, and something good in the city.</p>
+    <section id="companion-card" aria-label="Your companion" popover="auto">
+      <div class="companion-heading"><div><span class="companion-eyebrow">A LITTLE COMPANY</span><h2>Your companion</h2></div><button id="companion-close" type="button" autofocus aria-label="Close Your companion">×</button></div>
+      <p class="companion-intro">Research shaped by you.</p>
+      <button id="companion-notebook-open" type="button">Character, research &amp; history</button>
       <details id="companion-research-panel">
         <summary>Pending research <span id="companion-research-count">0</span></summary>
         <p id="companion-research-status" class="companion-note"></p>
         <div id="companion-research" aria-label="Pending research"></div>
       </details>
-      <div id="companion-chat" role="log" aria-label="Chat with Sanjana" aria-live="polite"></div>
+      <div id="companion-chat" role="log" aria-label="Chat with Companion" aria-live="polite"></div>
       <form id="companion-form">
-        <label for="companion-input">Message Sanjana</label>
+        <label for="companion-input">Message Companion</label>
         <textarea id="companion-input" rows="2" maxlength="8000" placeholder="Find us something for this weekend…"></textarea>
         <div class="companion-compose"><span id="companion-status" role="status"></span><button id="companion-stop" type="button" hidden>Stop</button><button id="companion-send" type="submit">Send</button></div>
       </form>
-      <p class="companion-note">Cloudflare researches hourly and publishes around 8pm America/New_York, even with your Mac off. Desktop chat uses your signed-in Codex runtime. Hiding her only changes this window.</p>
-      <div class="companion-settings"><label><input id="companion-motion" type="checkbox"> Still animation</label><button id="companion-pause" type="button">Pause research everywhere</button><button id="companion-hide" type="button">Hide Sanjana</button></div>
+      <p class="companion-note">Daily research runs server-side when the cloud runtime is connected. Desktop chat uses your signed-in Codex runtime. Hiding the character only changes this window.</p>
+      <div class="companion-settings"><label><input id="companion-motion" type="checkbox"> Still animation</label><button id="companion-pause" type="button">Pause research everywhere</button><button id="companion-hide" type="button">Hide Companion</button></div>
     </section>
-    <button id="companion-bubble" type="button" hidden popovertarget="companion-card" aria-label="Read Sanjana’s update"></button>
-    <button id="companion-toggle" type="button" aria-label="Visit Sanjana’s corner" popovertarget="companion-card"><span id="companion-sprite" aria-hidden="true"></span><span class="companion-name">Sanjana <span aria-hidden="true">♡</span></span></button>
+    <button id="companion-bubble" type="button" hidden popovertarget="companion-card" aria-label="Read Companion’s update"></button>
+    <button id="companion-toggle" type="button" aria-label="Visit Your companion" popovertarget="companion-card"><span id="companion-sprite" class="initials" aria-hidden="true">?</span><span class="companion-name">Companion <span aria-hidden="true">♡</span></span></button>
   </div>
   <script type="application/json" id="session-state">{{.Session}}</script>
   <script src="/app.js" defer></script>

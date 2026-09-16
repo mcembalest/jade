@@ -1,6 +1,6 @@
 {
   "name": "jade-personal-sync",
-  "main": "worker.js",
+  "main": "production.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
   "preview_urls": false,
@@ -25,5 +25,32 @@
       "17 7 * * *",
       "0 * * * *"
     ]
-  }
+  },
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "containers": [
+    {
+      "class_name": "ResearchContainer",
+      "image": "./runtime/Dockerfile",
+      "max_instances": 1,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RESEARCH",
+        "class_name": "ResearchContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "research-v1",
+      "new_sqlite_classes": [
+        "ResearchContainer"
+      ]
+    }
+  ]
 }

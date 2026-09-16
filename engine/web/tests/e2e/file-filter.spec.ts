@@ -66,3 +66,32 @@ test('filter fits a narrow sidebar and does not match file contents', async ({ p
   expect(box.x + box.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: info.outputPath('file-filter-narrow.png') });
 });
+
+test('quick open focuses and selects the filename filter', async ({ page, appURL }) => {
+  await page.goto(appURL + '/?file=notes.txt');
+  await editor(page).press('ControlOrMeta+p');
+  const filter=page.getByRole('searchbox',{name:'Filter filenames and paths'});
+  await expect(filter).toBeFocused();
+  await filter.fill('code.py');
+  await filter.press('Enter');
+  await fileIs(page,'code.py');
+});
+
+test('terminal waits for a successful save and preserves failed edits', async ({ page, appURL, workspace }) => {
+  await page.goto(appURL + '/?file=notes.txt');
+  let opened=0;
+  await page.route('**/terminal', async route=>{
+    expect(await readFile(join(workspace,'notes.txt'),'utf8')).toBe('Saved before terminal');
+    opened++;await route.fulfill({json:{message:'Terminal opened'}});
+  });
+  await page.route('**/save',route=>route.fulfill({status:503,body:'Unavailable'}));
+  await editor(page).fill('Saved before terminal');
+  await page.getByRole('button',{name:'Open terminal',exact:true}).click();
+  await expect(page.locator('#terminal-notice')).toContainText('Save or resolve');
+  expect(opened).toBe(0);
+  await expect(editor(page)).toHaveText('Saved before terminal');
+  await page.unroute('**/save');
+  await page.getByRole('button',{name:'Open terminal',exact:true}).click();
+  await expect(page.locator('#terminal-notice')).toContainText('Terminal opened');
+  expect(opened).toBe(1);
+});

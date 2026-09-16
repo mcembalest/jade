@@ -50,6 +50,7 @@ type syncRecord struct {
 	Acks         map[string]string `json:"acks,omitempty"`
 }
 type syncView struct {
+	Mode     string            `json:"mode,omitempty"`
 	Enabled  bool              `json:"enabled"`
 	Message  string            `json:"message"`
 	Files    map[string]string `json:"files"`
@@ -512,7 +513,12 @@ func (s *workspaceSync) keepBoth(path string) error {
 }
 func (a *app) syncHTTP(w http.ResponseWriter, r *http.Request) {
 	if a.syncer == nil {
-		writeJSON(w, 200, syncView{})
+		if r.Method != "GET" {
+			http.Error(w, "Project sync is managed by JaDE Mac Connection", 405)
+			return
+		}
+		directory, _ := os.UserConfigDir()
+		writeJSON(w, 200, projectSyncStatus(a.root, filepath.Join(directory, "JaDE"), time.Now()))
 		return
 	}
 	if r.Method == "GET" {

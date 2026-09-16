@@ -1,3 +1,4 @@
+import {initCompanionNotebook, type Notebook} from './companion-notebook.js';
 export function initCompanion() {
   const dock = document.querySelector<HTMLElement>('#companion-dock')!;
   const sprite = document.querySelector<HTMLElement>('#companion-sprite')!;
@@ -11,11 +12,12 @@ export function initCompanion() {
   let hidden = read('jade.companion.hidden') === 'true';
   motion.checked = read('jade.companion.still') === 'true';
   let timer = 0, frame = 0, waving = false;
+  let artwork = "";
   const idle = [280, 110, 110, 140, 140, 320];
   const wave = [140, 140, 140, 280];
   function animate() {
     clearTimeout(timer);
-    if (hidden || document.hidden || motion.checked || reduced.matches) {
+    if (artwork !== "sanjana" || hidden || document.hidden || motion.checked || reduced.matches) {
       sprite.style.backgroundPosition = '0px 0px';
       return;
     }
@@ -52,7 +54,7 @@ export function initCompanion() {
   reduced.addEventListener('change', () => { frame = 0; animate(); });
   document.addEventListener('visibilitychange', () => { frame = 0; animate(); });
   type Message = { id: string; role: string; text: string; sources?: {title: string; url: string}[]; proactive?: boolean; foundAt?: number };
-  type State = { messages: Message[]; enabled: boolean; next: number; seen: string; pending?: Message[]; researchNext?: number; researchChecked?: number; researchError?: string; paused?: boolean; providerStatus?: string; offline?: boolean };
+  type State = { notebook?: Notebook; messages: Message[]; enabled: boolean; next: number; seen: string; pending?: Message[]; researchNext?: number; researchChecked?: number; researchError?: string; paused?: boolean; providerStatus?: string; offline?: boolean };
   const chat = document.querySelector<HTMLElement>('#companion-chat')!;
   const input = document.querySelector<HTMLTextAreaElement>('#companion-input')!;
   const status = document.querySelector<HTMLElement>('#companion-status')!;
@@ -83,7 +85,7 @@ export function initCompanion() {
   }
   function messageRow(message: Message) {
     const row = document.createElement('div'); row.className = 'companion-message'; row.dataset.role = message.role;
-    const author = document.createElement('strong'); author.textContent = message.foundAt ? new Date(message.foundAt).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : message.role === 'user' ? 'You' : 'Sanjana';
+    const author = document.createElement('strong'); author.textContent = message.foundAt ? new Date(message.foundAt).toLocaleString([], {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : message.role === 'user' ? 'You' : state?.notebook?.name || 'Companion';
     const text = document.createElement('p'); text.textContent = message.text;
     row.append(author, text);
     for (const source of message.sources || []) {
@@ -97,6 +99,20 @@ export function initCompanion() {
   }
   function render(next: State) {
     state = next;
+    const name=next.notebook?.name||'Companion';
+    document.querySelector<HTMLElement>('.companion-name')!.textContent=name;
+    document.querySelector<HTMLElement>('.companion-heading h2')!.textContent=name;
+    toggle.setAttribute('aria-label','Visit '+name);
+    restore.textContent='Show '+name;
+    if(artwork!==(next.notebook?.avatar??'')) {
+      artwork=next.notebook?.avatar??'';
+      sprite.classList.toggle('custom-avatar',artwork.startsWith('data:image/'));
+      sprite.classList.toggle('initials',!artwork);
+      sprite.style.backgroundImage=artwork.startsWith('data:image/')?`url("${artwork}")`:artwork==='sanjana'?'url(/companion.png)':'none';
+      sprite.textContent=artwork?'':name.slice(0,2).toUpperCase();frame=0;animate();
+    }
+    if(!artwork){sprite.classList.add('initials');sprite.textContent=name.slice(0,2).toUpperCase();}
+
     pause.textContent = next.paused ? 'Resume research everywhere' : 'Pause research everywhere';
     if (next.offline) status.textContent = 'Offline · showing saved updates';
     const serialized = JSON.stringify(next.messages);
@@ -122,7 +138,7 @@ export function initCompanion() {
       next.providerStatus ? next.providerStatus :
       next.researchError ? next.researchError :
       pending.length >= 24 ? '24 findings pending. Research resumes after the daily update.' :
-      next.researchChecked ? 'Last checked ' + new Date(next.researchChecked).toLocaleString() : 'Cloudflare checks hourly, even with JaDE closed.';
+      next.researchChecked ? 'Last checked ' + new Date(next.researchChecked).toLocaleString() : 'Daily cloud research runs at the time in Character, research & history.';
     const latest = [...next.messages].reverse().find(message => message.role === 'assistant');
     bubble.hidden = hidden || !latest?.proactive || latest.id === next.seen || card.matches(':popover-open');
     bubble.textContent = latest?.text.slice(0,140) || '';
@@ -172,6 +188,7 @@ export function initCompanion() {
   window.addEventListener('pagehide', () => active?.abort());
   document.addEventListener('visibilitychange', () => { if (!document.hidden) void refresh(); });
   window.setInterval(() => { void refresh(); }, 15_000);
+  initCompanionNotebook(()=>void refresh());
   visibility();
   void refresh();
 }

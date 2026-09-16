@@ -451,9 +451,10 @@ initSearch(async (file, line) => {
     editor.focus();
   });
 });
-const openTerminal = initTerminals(body, document.querySelector<HTMLElement>('#terminal-status')!);
+const openTerminal = initTerminals(body, document.querySelector<HTMLElement>('#terminal-status')!, async () => !moving && !loadingDrafts && await save());
 addEventListener('keydown', event => {
-  if (!(event.metaKey || event.ctrlKey)) return;
+  if (!(event.metaKey || event.ctrlKey) || event.isComposing || document.querySelector('dialog[open]')) return;
+  if (event.key.toLowerCase() === 'p' && !event.shiftKey) { event.preventDefault(); showFiles(true); const filter=document.querySelector<HTMLInputElement>('#file-filter')!;filter.focus();filter.select(); }
   if (event.key.toLowerCase() === 's') { event.preventDefault(); if (!newFileDialog.open) save(); }
   if (event.key.toLowerCase() === 'j') { event.preventDefault(); openTerminal(); }
 });

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -80,7 +81,7 @@ func TestTerminalLaunchAndFallback(t *testing.T) {
 	}{
 		{"root", ".", "", false, 200, []string{systemTerminal}},
 		{"nested", "inner", "Ghostty", false, 200, []string{"Ghostty"}},
-		{"missing override", "inner", "/missing/Ghostty.app", true, 200, []string{"/missing/Ghostty.app", systemTerminal}},
+		{"missing override", "inner", "/missing/Ghostty.app", true, 400, []string{"/missing/Ghostty.app"}},
 		{"traversal", "../outside", "", false, 400, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -129,11 +130,26 @@ func TestTerminalArgumentsKeepPathsLiteral(t *testing.T) {
 	for _, app := range []string{systemTerminal, "/Applications/Ghostty.app"} {
 		args := terminalArguments(app, directory)
 		expected := directory
-		if app != systemTerminal {
+		if terminalName(app) == "Alacritty" {
 			expected = "--working-directory=" + directory
 		}
 		if args[len(args)-1] != expected {
 			t.Fatalf("arguments = %q", args)
 		}
+	}
+}
+
+func TestNativeTerminalPathsAreNotScriptSource(t *testing.T) {
+	for _, app := range []string{systemTerminal, "/Applications/Ghostty.app"} {
+		script := terminalScript(app)
+		if script == "" || !strings.Contains(script, "item 1 of argv") {
+			t.Fatalf("missing native adapter: %s", app)
+		}
+	}
+	if strings.Contains(terminalScript("Ghostty"), "do script") {
+		t.Fatal("Ghostty should set the directory natively")
+	}
+	if !strings.Contains(terminalScript(systemTerminal), "quoted form") {
+		t.Fatal("Terminal directory must be shell quoted")
 	}
 }

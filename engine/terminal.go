@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -140,16 +141,42 @@ func (a *app) terminalPreference(response http.ResponseWriter, request *http.Req
 	writeJSON(response, http.StatusOK, availableTerminals())
 }
 
+// Native application commands create a new session in the running app. Paths
+// travel as argv data, never as AppleScript source or keystrokes in an old shell.
+func terminalScript(app string) string {
+	switch strings.ToLower(terminalName(app)) {
+	case "ghostty":
+		return `on run argv
+ tell application id "com.mitchellh.ghostty"
+  set cfg to new surface configuration
+  set initial working directory of cfg to item 1 of argv
+  set win to new window with configuration cfg
+  activate window win
+  return id of win
+ end tell
+end run`
+	case "terminal":
+		return `on run argv
+ tell application id "com.apple.Terminal"
+  set session to do script ("cd -- " & quoted form of (item 1 of argv))
+  activate
+  return tty of session
+ end tell
+end run`
+	default:
+		return ""
+	}
+}
+
 func terminalArguments(app, directory string) []string {
 	switch strings.ToLower(terminalName(app)) {
-	case "ghostty", "alacritty":
+	case "alacritty":
 		return []string{"-n", "-a", app, "--args", "--working-directory=" + directory}
 	case "wezterm":
-		return []string{"-n", "-a", app, "--args", "start", "--cwd", directory}
+		return []string{"-a", app, "--args", "start", "--cwd", directory}
 	case "kitty":
-		return []string{"-n", "-a", app, "--args", "--directory", directory}
+		return []string{"-a", app, "--args", "--directory", directory}
 	default:
-		// Terminal and iTerm accept a directory through Launch Services.
 		return []string{"-a", app, directory}
 	}
 }
@@ -158,11 +185,27 @@ var launchTerminal = func(ctx context.Context, app, directory string) error {
 	if runtime.GOOS != "darwin" {
 		return errors.New("opening terminal apps requires macOS")
 	}
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(ctx, "/usr/bin/open", terminalArguments(app, directory)...).CombinedOutput()
+	var cmd *exec.Cmd
+	if script := terminalScript(app); script != "" {
+		cmd = exec.CommandContext(ctx, "/usr/bin/osascript", "-", directory)
+		cmd.Stdin = strings.NewReader(script)
+	} else {
+		cmd = exec.CommandContext(ctx, "/usr/bin/open", terminalArguments(app, directory)...)
+	}
+	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if bytes.Contains(output, []byte("-1743")) || bytes.Contains(output, []byte("not authorized")) {
+			return errors.New("macOS denied terminal automation. Allow JaDE’s host app to control " + terminalName(app) + " in System Settings → Privacy & Security → Automation, then retry.")
+		}
+		if ctx.Err() != nil {
+			return errors.New("Terminal launch was not confirmed. Check for a macOS permission prompt before retrying.")
+		}
 		return fmt.Errorf("%s: %w", strings.TrimSpace(string(output)), err)
+	}
+	if terminalScript(app) != "" && len(bytes.TrimSpace(output)) == 0 {
+		return errors.New("The terminal did not confirm a new session")
 	}
 	return nil
 }
@@ -177,22 +220,13 @@ func (a *app) terminal(response http.ResponseWriter, request *http.Request) {
 	}
 	cwd, err := workspaceDirectory(a.root, request.FormValue("jade"))
 	selected := availableTerminals().Selected
-	fallback := false
 	if err == nil {
 		err = launchTerminal(request.Context(), selected, cwd)
-		if err != nil && selected != systemTerminal && request.Context().Err() == nil {
-			selected = systemTerminal
-			fallback = true
-			err = launchTerminal(request.Context(), selected, cwd)
-		}
 	}
 	if err != nil {
 		writeJSON(response, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	message := "Opened " + terminalName(selected) + "."
-	if fallback {
-		message = "Opened Terminal because the selected app was unavailable."
-	}
 	writeJSON(response, http.StatusOK, map[string]string{"message": message})
 }
