@@ -24,8 +24,15 @@ export async function remote(request,env) {
   await env.DB.prepare('UPDATE remote_requests SET result=? WHERE id=? AND result IS NULL').bind(JSON.stringify(b.result),b.id).run();
   return json({ok:true});
  }
- if(u.pathname!=='/v1/remote/request'||!['roots','list','read','write'].includes(b.action))return json({error:'Unsupported operation'},400);
- const payload=JSON.stringify({action:b.action,root:b.root||'',path:b.path||'',content:b.content,revision:b.revision});
+ if(u.pathname!=='/v1/remote/request'||!['roots','list','read','write','companion'].includes(b.action))return json({error:'Unsupported operation'},400);
+ if(b.action==='companion') {
+  const c=b.companion;
+  if(c!==undefined && (!c || typeof c!=='object' || !['chat','research','discover','enabled','seen'].includes(c.action) ||
+   (c.action==='chat' && (typeof c.message!=='string'||!c.message.trim()||new TextEncoder().encode(c.message).length>8000)) ||
+   (c.action==='enabled'&&typeof c.enabled!=='boolean') || (c.action==='seen'&&(typeof c.seen!=='string'||c.seen.length>80))))return json({error:'Invalid companion request'},400);
+  if(c && Object.keys(c).some(k=>!['action','message','enabled','seen'].includes(k)))return json({error:'Invalid companion field'},400);
+ }
+ const payload=JSON.stringify(b.action==='companion'?{action:b.action,companion:b.companion}:{action:b.action,root:b.root||'',path:b.path||'',content:b.content,revision:b.revision});
  const old=await env.DB.prepare('SELECT payload FROM remote_requests WHERE id=?').bind(b.id).first();
  if(old && old.payload!==payload)return json({error:'Request ID already used'},409);
  await env.DB.prepare('INSERT OR IGNORE INTO remote_requests(id,payload,created) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM remote_requests WHERE result IS NULL AND created>?)<32').bind(b.id,payload,now,now-60000).run();

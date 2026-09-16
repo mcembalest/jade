@@ -110,6 +110,7 @@ test('editing a preview keeps it available after a failed save, then succeeds fr
 });
 
 test('preview protection blocks embedded scripts while allowing trusted navigation', async ({page,appURL})=>{
+  const warnings:string[]=[];page.on('console',message=>{if(message.text().includes('escape its sandbox'))warnings.push(message.text());});
   // Exercise the browser policy even if future rendering changes admit raw markup.
   await page.route('**/view?*',async route=>{
     const response=await route.fetch();
@@ -130,6 +131,7 @@ test('preview protection blocks embedded scripts while allowing trusted navigati
   await expect(popup).toHaveURL('http://example.test/article');
   await popup.close();
   await expect(page).toHaveURL(appURL+'/');
+  expect(warnings).toEqual([]);
 });
 
 test('a nested folder can edit shared code outside its own directory', async ({page,appURL,workspace})=>{

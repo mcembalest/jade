@@ -11,14 +11,18 @@ def restore(manifest,read_chunk,target):
     if target.exists():raise ValueError('Recovery target already exists')
     db=sqlite3.connect(target)
     try:
-        for sql in manifest['schema']:db.execute(sql)
+        deferred=[]
+        for sql in manifest['schema']:
+            if 'TRIGGER' in sql.upper() and 'companion_archive_' in sql:deferred.append(sql)
+            else:db.execute(sql)
         def insert(table,row):
             row={k:v for k,v in row.items() if k!='_rowid'}
             if not all(k.replace('_','').isalnum() for k in row):raise ValueError('Invalid column')
             db.execute('INSERT INTO '+table+'('+','.join('"'+k+'"' for k in row)+') VALUES('+','.join('?' for _ in row)+')',list(row.values()))
         for row in manifest['projects']:insert('projects',row)
+        for row in manifest.get('companion',[]):insert('companion_state',row)
         for part in manifest['chunks']:
-            if part['table'] not in ('revisions','project_revisions'):raise ValueError('Invalid backup table')
+            if part['table'] not in ('revisions','project_revisions','companion_archive'):raise ValueError('Invalid backup table')
             raw=read_chunk(part['key'])
             if hashlib.sha256(raw).hexdigest()!=part['sha256']:raise ValueError('Backup checksum mismatch')
             rows=json.loads(raw)
@@ -32,6 +36,7 @@ def restore(manifest,read_chunk,target):
         if actual!=manifest['noteHeads']:raise ValueError('Notes snapshot does not match history')
         actual=[dict(r) for r in db.execute('SELECT project,path,revision,macRevision,macIssue FROM project_files ORDER BY project,path')]
         if actual!=manifest['projectHeads']:raise ValueError('Project snapshot does not match history')
+        for sql in deferred:db.execute(sql)
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError('SQLite integrity failed')
         db.commit()
     except BaseException:

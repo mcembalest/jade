@@ -15,9 +15,10 @@ export function initSync() {
       if (!response.ok) throw new Error('Sync status unavailable');
       const data = await response.json(); panel.hidden = !data.enabled;
       if (data.enabled) {
+        button.hidden=data.mode==='project';
         const status = data.files?.[path()] || data.message;
         label.textContent = status + (data.message?.includes('pending') || data.message?.includes('failed') || data.message?.includes('unreachable') ? ' · ' + data.message : '');
-        both.hidden = !status.startsWith('Conflict');
+        both.hidden = data.mode==='project' || !status.startsWith('Conflict');
         label.title = data.lastSync ? 'Last server check: ' + new Date(data.lastSync).toLocaleString() : 'Not yet synced';
       }
     } catch { if (!panel.hidden) label.textContent = 'Sync status unavailable · local editor saves are separate'; }

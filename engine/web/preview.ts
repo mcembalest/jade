@@ -2,6 +2,11 @@ type Card = { panel: HTMLElement; frame: HTMLIFrameElement; url: string; parent?
 
 export function initPreview(editFile: (file: string) => Promise<boolean>) {
   const base = document.querySelector<HTMLElement>('#resolved')!;
+  // WebKit blocks parent-installed event handlers unless scripts are permitted.
+  // Document scripts remain forbidden by the response CSP in every browser.
+  if (/AppleWebKit/.test(navigator.userAgent) && !/(Chrome|Chromium|Edg)\//.test(navigator.userAgent)) {
+    base.querySelector('iframe')!.sandbox.add('allow-scripts');
+  }
   const template = base.cloneNode(true) as HTMLElement;
   const toggle = document.querySelector<HTMLButtonElement>('#preview-toggle')!;
   const search = document.querySelector<HTMLDialogElement>('#search-dialog')!;

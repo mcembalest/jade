@@ -76,3 +76,13 @@ For existing Mac installations, use `python3 remote/update.py` to build and back
 This is a custom client sync protocol on native Cloudflare storage, not a Cloudflare-built file-sync product. The design uses ordinary durable outboxes, immutable revision IDs, optimistic concurrency, atomic SQL triggers, and exact device receipts. D1 holds small full-text snapshots and metadata in one transaction. Keeping them together avoids cross-service commit machinery for this bounded workload. R2 is the backup store; queues, Durable Objects, CRDTs and block-level transfer are unnecessary for this version. Client HTTP boundaries allow later storage changes, but replacement providers must satisfy the same concurrency/durability tests.
 
 Additional validation: seven Worker tests including concurrent writes during backup, failed R2 writes, checksum rejection and actual SQLite restoration; Swift tests for interrupted/resumed bulk downloads and conflicts that change again during resolution; nine Mac regression tests; a signed simulator UI test covering bulk download, conflict comparison/resolution and app restart. The first production R2 backup was downloaded and restored into an isolated SQLite file. Phone 0.2.1 build 3 installed successfully; the lock screen prevented automatic launch.
+
+## Sanjana backup coverage
+
+The existing daily 07:17 UTC exporter also captures `companion_state` (schema and
+complete versioned document) transactionally with mutable file heads. This covers
+profile, latest 100 messages, pending findings, shared pause, deduplication and
+durable scheduling reservations. The recovery tool accepts both newer manifests
+with a `companion` snapshot and older manifests without it. No new bucket or
+authentication system is introduced. The separate hourly Sanjana Cron does not run
+a full file backup. See [Sanjana](../../engine/web/companion/README.md) for activation.

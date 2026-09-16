@@ -30,3 +30,9 @@ Update: reinstall.
 Opening a project restores its last file, cursor, scroll position and sidebar layout. An explicit file argument or file URL takes precedence. Running `jade` without a path still opens the current directory. Desktop project opening does not enable phone access or cloud sync.
 
 [Development](engine/README.md) · [MNIST example](examples/mnist/README.md)
+
+### Editing and companion setup
+
+Use ⌘/Ctrl+P to filter and open files, ⌘/Ctrl+F for find/replace, ⌘/Ctrl+S to save, and ⌘/Ctrl+J to open a real terminal in the current project. Terminal opening saves the current file first and stops on unresolved save conflicts. On macOS, Ghostty 1.3+ and Terminal use their native scripting interfaces; macOS may require Automation permission. A launch error is shown rather than silently switching applications.
+
+**Character, research & history** configures your companion from scratch. Name, character, research brief, memory, daily time and image are shared with the phone. Read [daily research setup](sync/cloudflare/RESEARCH.md) for the server runtime, sign-in, durable history and current limits.

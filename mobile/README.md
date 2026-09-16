@@ -34,3 +34,17 @@ Cloud projects 0.2.1 adds resumable bulk offline downloads, three-version confli
 The Mac files editor uses a native text view with a keyboard toolbar: indent selected lines by four spaces, remove up to four leading spaces (or one tab), insert code punctuation, undo/redo, and dismiss the keyboard. Smart quotes and smart dashes are disabled so typing preserves source punctuation. Each action uses the same phone-draft binding as typing; **Save to Mac** is still explicit. Notes editing is unchanged.
 
 `JaDE/SourceTextEditor.swift` contains only presentation and in-memory editing. Its line-edit helper uses UTF-16 selection offsets to match UIKit and preserves existing line endings. It has no storage or network dependencies. See [editor tests](tests/README.md) for pure Swift and isolated native verification.
+
+## Sanjana
+
+Version 0.4.0 build 6 reads the authoritative Cloudflare state directly using the
+existing pairing. It displays cached updates offline and refreshes with GET only;
+it never asks the Mac relay to research or publish. There is no mobile composer or
+manual discovery action. Legacy cached drafts and receipts remain on disk.
+
+Cloudflare owns hourly research opportunities and the daily 8pm America/New_York
+publication. **Pause research everywhere** is shared; hiding the character and
+stopping animation are local preferences. Desktop chat is excluded from the feed.
+Autonomous research awaits an OpenAI/Codex subscription-backed cloud runtime;
+the UI reports that status. Other providers and separate API billing are not enabled.
+See [Sanjana architecture and setup](../engine/web/companion/README.md).

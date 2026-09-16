@@ -28,6 +28,9 @@ def run(command, *, private=False, allow_locked=False):
         detail = stream.read()
     log.chmod(0o600)
     if result.returncode:
+        if allow_locked and "profile has not been explicitly trusted" in detail:
+            print("JaDE is installed. iOS blocked launch with a signing/trust error. On the iPhone, open Settings → General → VPN & Device Management and trust your developer account if prompted, then open JaDE. If it still fails, inspect " + str(log))
+            return False
         if allow_locked and ("BSErrorCodeDescription = Locked" in detail or "device was not, or could not be, unlocked" in detail):
             print("JaDE is installed. Unlock your phone and open JaDE normally; iOS blocked automatic launch while locked.")
             return False

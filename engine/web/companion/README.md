@@ -1,94 +1,81 @@
 # Sanjana
 
-## Setup
+Sanjana is one persistent character shared by desktop and iPhone. The mobile tab
+shows discoveries and proactive daily updates, with no chat composer. Her existing
+artwork and [character profile](character.md) are preserved.
 
-| Requirement | Command |
-| --- | --- |
-| JaDE | `go install github.com/mcembalest/jade@main` |
-| Codex runtime on macOS | `brew install --cask codex` |
-| Subscription sign-in | `codex login` |
-| Check sign-in | `codex login status` |
-| Check runtime | `codex --version` |
+## Cloud ownership
 
-Chat: `codex` on `PATH` · subscription sign-in · configured model
-Verified: CLI 0.153.4; newer models may require an upgrade
-Editor + animation: no Codex required · Node not required
+`jade-personal-sync` runs an hourly Cloudflare Cron (`0 * * * *`). It first publishes
+pending findings at or after 20:00 America/New_York, then reserves at most one
+research opportunity per elapsed hour. New York calendar dates handle DST. Empty
+queues produce no empty update. Missed hours do not cause catch-up model calls.
+Neither client can trigger research or publication; opening/refreshing only reads.
+The Mac, browser and phone can all be off.
 
-## Controls
+D1's `companion_state` is the authority for the profile, latest 100 messages,
+24 pending findings, shared pause setting, daily date, last research reservation,
+and recent source deduplication (up to 2,000 normalized URLs). It is a small,
+versioned document, updated with compare-and-swap. Publication appends its daily ID
+and clears the queue in the same atomic update. Conflicting storage writes retry;
+provider calls never retry automatically. A failed/uncertain attempt consumes its
+hourly opportunity. Findings completing during a pause are kept for later delivery.
+Pause prevents subsequent research and publication; resume does not trigger work.
 
-| Control | Behavior |
-| --- | --- |
-| Sanjana | Open chat in the existing popover |
-| Send / Enter | Send a message; explicit web-search requests are supported |
-| Shift+Enter | Insert a newline |
-| Stop | Cancel the current request |
-| Speech bubble | Open an unread autonomous discovery |
-| Hide Sanjana | Pause discoveries across JaDE windows |
-| Show Sanjana | Resume without resetting the daily limit |
-| Still animation | Stop animation; system reduced-motion preferences also apply |
-| Escape / close / click outside | Dismiss the popover |
+**Pause research everywhere** is an explicit shared control. Hiding the character
+or stopping animation is local and never changes the schedule. Both clients cache
+cloud state for offline reading. The mobile feed excludes ordinary chat messages.
 
-## Research and delivery
+Desktop chat remains an explicit Mac feature using the signed-in Codex runtime.
+It reads the cloud profile/history and appends the reply to that same cloud history.
+It requires the Mac and cloud online. The bounded desktop prompt uses at most
+40 messages / 64KB. This is not unlimited long-term memory.
 
-| Research / delivery | Setting |
-| --- | --- |
-| Research | Enabled, open pages only; ≤1/hour across windows; no catch-up |
-| Model | Configured model · low reasoning · 90 s timeout |
-| Search budget | ≤2 searches + 1 page; ≤600 characters; ≤3 original sources |
-| Context | Character, recent chat, pending findings |
-| Filtering | Source required; duplicate pending source URLs skipped |
-| Pending view | Findings, timestamps, sources, last check, errors; opening preserves findings |
-| Delivery | 8pm host-local time; ≤1 update/day; no extra model call |
-| Late delivery | Same evening on reopening or next successful research; no missed-day backlog |
-| History | Delivered findings retained in chat |
-| Queue | Persistent; research pauses at 24 findings until delivery |
-| Hide / close all pages | Pause research and delivery; deadlines retained |
-| Sleep / background tabs | May delay research and delivery |
-| Chat | Always available; stops same-page research; includes pending findings |
-| Shared state | Checked approximately every 15 s |
-| Errors | Retry next hourly opportunity |
-| Usage | Codex subscription allowance |
+## OpenAI/Codex subscription requirement
 
-## Character and history
+**Sanjana must use the user's OpenAI/Codex subscription.** Another provider or a
+separately billed API is not an approved substitute. Desktop chat already uses
+the signed-in Codex runtime and live search on the Mac.
 
-| Data | Location / behavior |
-| --- | --- |
-| Character guidance | [character.md](character.md), embedded at build time |
-| Saved chat, pending research, check status, visibility, deadlines, read status | `JaDE/companion/chat.json` under the OS user configuration directory |
-| macOS configuration directory | `~/Library/Application Support` |
-| Saved history | Latest 100 messages; latest 40 messages, bounded to 64 KB, supplied as context |
-| Animation preference | Browser local storage, per origin |
-| Credentials | Managed by Codex; not returned to the browser |
+The Cloudflare scheduler, shared history and daily publication are deployed, but
+**autonomous research is not connected**. The cloud provider module reports this
+blocker and makes no AI request. There is no AI binding or paid-provider activation
+flag. An hourly opportunity is recorded as blocked, never as successful research;
+existing findings remain available for scheduled publication.
 
-| Requests / artwork | Details |
-| --- | --- |
-| Sent to Codex | Profile + recent conversation; no editor files |
-| Session | Ephemeral app-server thread; temporary directory; read-only sandbox |
-| Disabled | Shell, connected apps, plugins, browser/computer control, multi-agent; additional permissions rejected |
-| Source links | New tab; Reddit/paywalls depend on web-search access |
-| Sprite | `spritesheet.png` · 8 × 9 cells · 192 × 208 px |
-| Playback | Embedded; idle + wave; paused on hidden pages |
+Official [Codex authentication documentation](https://developers.openai.com/codex/auth/)
+supports ChatGPT sign-in on remote/headless machines using device authentication.
+It distinguishes that subscription access from API-key billing. A Codex runtime
+hosted in Cloudflare (for example, in a container) is therefore a candidate path;
+it still needs implementation, authenticated runtime persistence and validation.
+A direct subscription-authenticated Worker inference endpoint has not been
+established. Subscription-backed cloud execution is not ruled out.
 
-## Development
+Do not configure AI Gateway credits or native Cloudflare Web Search to activate
+this implementation. Prefer a dedicated device-auth login for a future cloud
+runtime; never expose login credentials or substitute paid API credentials.
+No autonomous Mac scheduler or client-triggered research is enabled.
+The target remains bounded, sourced research (about two searches and one page per
+hour), up to 24 pending findings, and one daily update around 8pm New York time.
 
-Repository root:
+## Migration, deployment and recovery
 
-```sh
-npm --prefix engine/web run build
-npm --prefix engine/web test
-```
+Apply `sync/cloudflare/companion.sql` to the existing D1 database, deploy the Worker,
+install the new Mac service, then run `python3 remote/migrate-companion.py`. The tool
+locks legacy research/history, privately backs up `chat.json`, and persists the
+migration payload before uploading. It uses the existing agent credential. A retry
+uses the same identity; an existing different cloud history is never overwritten.
+The original local file remains untouched. Mobile legacy drafts/receipts stay on
+disk and are neither sent again nor displayed as a composer.
 
-Profile, artwork, code changes → rebuild + restart
-Regression tests: fake Codex + intercepted responses; no subscription usage.
+The existing 07:17 UTC daily R2 exporter snapshots the complete companion row and
+schema in the same transaction as other mutable heads. Recovery restores the profile,
+queue, history, pause, deduplication and reservation clocks. Old pre-companion
+manifests still restore. `remote/backup-cloud.py` exports the entire database too.
+Existing Notes, Cloud projects, folder grants and explicit fetch/submit semantics
+are unchanged.
 
-Optional live check (uses subscription allowance):
-
-```sh
-JADE_LIVE_CHECK=1 go test ./engine -run TestCompanionLive -v -count=1
-```
-
-## References
-
-- [Codex app-server](https://learn.chatgpt.com/docs/app-server)
-- [Codex authentication](https://learn.chatgpt.com/docs/auth)
-- [Web-search configuration](https://learn.chatgpt.com/docs/config-file/config-basic)
+Tests: `npm test` in `sync/cloudflare`; Go race suite; browser companion/recursive
+checks; `mobile/tests/SanjanaStoreTests.swift`; native `testSanjanaUpdatesWithoutChat`.
+Fake providers and controlled clocks exercise no-UI scheduling, concurrent ticks,
+failures, pause/resume, URL deduplication, DST, downtime, migration and restoration.

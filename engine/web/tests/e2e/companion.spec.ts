@@ -3,24 +3,25 @@ import { join } from 'node:path';
 import { revealFiles, test, expect, editor } from './fixtures';
 
 test('companion chat, preferences and keyboard dismissal', async ({ page, appURL }, info) => {
+  await page.route('**/companion',route=>route.fulfill({json:{messages:[],pending:[],enabled:true,paused:false,seen:''}}));
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(appURL);
-  await page.getByRole('button', { name: 'Visit Sanjana’s corner' }).click();
-  await expect(page.getByRole('textbox', { name: 'Message Sanjana' })).toBeVisible();
+  await page.locator('#companion-toggle').click();
+  await expect(page.getByRole('textbox', { name: 'Message Companion' })).toBeVisible();
   await expect(page.getByRole('log')).toContainText('Tell me what you’re in the mood for');
   await page.getByRole('checkbox', { name: 'Still animation' }).check();
   await page.screenshot({path:info.outputPath('companion-desktop.png')});
-  await page.getByRole('button', { name: 'Hide Sanjana' }).click();
+  await page.getByRole('button', { name: 'Hide Companion' }).click();
   await page.reload();
   await expect(page.locator('#companion-dock')).toBeHidden();
-  await page.getByRole('button', { name: 'Show Sanjana' }).click();
-  await page.getByRole('button', { name: 'Visit Sanjana’s corner' }).click();
+  await page.getByRole('button', { name: 'Show Companion' }).click();
+  await page.locator('#companion-toggle').click();
   await expect(page.getByRole('checkbox', { name: 'Still animation' })).toBeChecked();
   await page.keyboard.press('Escape');
   await expect(page.locator('#companion-card')).toBeHidden();
   await expect(page.locator('#companion-toggle')).toBeFocused();
   await page.setViewportSize({width:390,height:844});
-  await page.getByRole('button', { name: 'Visit Sanjana’s corner' }).click();
+  await page.locator('#companion-toggle').click();
   const box = (await page.locator('#companion-card').boundingBox())!;
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(390);
@@ -75,7 +76,7 @@ test('chat sends, persists, and safely displays linked replies', async ({page,ap
   });
   await page.goto(appURL);
   await page.locator('#companion-toggle').click();
-  await page.getByRole('textbox',{name:'Message Sanjana'}).fill('Search for a vegetarian date spot');
+  await page.getByRole('textbox',{name:'Message Companion'}).fill('Search for a vegetarian date spot');
   await page.getByRole('button',{name:'Send',exact:true}).click();
   await expect(page.getByRole('log')).toContainText('Search for a vegetarian date spot');
   await expect(page.getByRole('log')).toContainText('<script>alert(1)</script>');
@@ -88,72 +89,30 @@ test('chat sends, persists, and safely displays linked replies', async ({page,ap
   await page.screenshot({path:'../../.tmp/companion-chat-'+test.info().project.name+'.png'});
 });
 
-test('hourly pending research is visible before one evening update', async ({page,appURL}) => {
-  await page.clock.install({time:new Date('2026-09-05T12:00:00Z')});
-  let researchCalls = 0, updates = 0;
-  type Note = {id:string;role:string;text:string;proactive?:boolean;foundAt?:number;sources?:{title:string;url:string}[]};
-  const state = {messages:[] as Note[], pending:[] as Note[],enabled:true,next:Date.parse('2026-09-05T20:00:00Z'),researchNext:0,researchChecked:0,seen:''};
-  await page.route('**/companion', async route => {
-    const body = route.request().postDataJSON();
-    const now = await page.evaluate(() => Date.now());
-    if (body?.action === 'research') {
-      researchCalls++;
-      state.pending.push({id:'r'+researchCalls,role:'assistant',text:'NYC history find '+researchCalls,foundAt:now,sources:[{title:'Original source '+researchCalls,url:'https://example.com/'+researchCalls}]});
-      state.researchNext = now+60*60_000;
-      state.researchChecked = now;
-    }
-    if (body?.action === 'discover') {
-      updates++;
-      state.messages.push({id:'d'+updates,role:'assistant',text:state.pending.map(n => n.text).join(' · '),proactive:true});
-      state.pending=[];
-      state.next=Date.parse('2026-09-06T20:00:00Z');
-    }
-    if (body?.action === 'enabled') state.enabled = body.enabled;
-    if (body?.action === 'seen') state.seen = body.seen;
+test('opening, reloading and hiding never schedule cloud research or publication', async ({page,appURL}) => {
+  await page.clock.install({time:new Date('2026-09-05T23:00:00Z')});
+  const actions:string[]=[];
+  const state={messages:[],pending:[{text:'Cloud discovery',sources:[{title:'Original source',url:'https://example.com/story'}]}],enabled:true,paused:false,next:0,researchNext:0,seen:''};
+  await page.route('**/companion',async route=>{
+    const body=route.request().postDataJSON();
+    if(body) {actions.push(body.action);if(body.action==='settings')state.paused=body.paused;}
     await route.fulfill({json:state});
   });
   await page.goto(appURL);
-  await expect.poll(() => researchCalls).toBe(1);
-  await editor(page).click();
-  await expect(page.locator('#companion-bubble')).toBeHidden();
   await page.locator('#companion-toggle').click();
-  await expect(page.locator('#companion-research')).toBeHidden();
   await page.locator('#companion-research-panel summary').click();
-  await expect(page.locator('#companion-research')).toBeVisible();
-  await expect(page.locator('#companion-research')).toContainText('NYC history find 1');
-  await expect(page.getByRole('link',{name:'Original source 1'})).toHaveAttribute('href','https://example.com/1');
-  await expect(page.locator('#companion-research-status')).toContainText('Last checked');
-  await page.screenshot({path:'../../.tmp/companion-research-'+test.info().project.name+'.png'});
-  await page.setViewportSize({width:390,height:844});
-  await page.screenshot({path:'../../.tmp/companion-research-mobile-'+test.info().project.name+'.png'});
-  await page.setViewportSize({width:1240,height:820});
-  await page.keyboard.press('Escape');
-  await page.clock.fastForward(59*60_000);
-  expect(researchCalls).toBe(1);
-  await page.clock.fastForward(60_000);
-  await expect.poll(() => researchCalls).toBe(2);
-  expect(updates).toBe(0);
+  await expect(page.locator('#companion-research')).toContainText('Cloud discovery');
+  await page.clock.fastForward(25*60*60_000);
   await page.reload();
   await page.locator('#companion-toggle').click();
-  await expect(page.locator('#companion-research-count')).toHaveText('2');
-  await page.keyboard.press('Escape');
-  await editor(page).click();
-  await page.clock.fastForward(7*60*60_000);
-  await expect(page.locator('#companion-bubble')).toBeVisible();
-  await expect.poll(() => updates).toBe(1);
-  await expect(editor(page)).toBeFocused();
-  await expect(page.locator('#companion-card')).toBeHidden();
-  await page.locator('#companion-bubble').click();
-  await expect(page.getByRole('log')).toContainText('NYC history find 1');
-  await expect(page.locator('#companion-bubble')).toBeHidden();
-  await page.clock.fastForward(60*60_000);
-  expect(updates).toBe(1);
   await page.locator('#companion-hide').click();
-  await expect.poll(() => state.enabled).toBe(false);
-  const paused = researchCalls;
-  await page.clock.fastForward(24*60*60_000);
-  expect(researchCalls).toBe(paused);
-  expect(updates).toBe(1);
+  expect(actions).toEqual([]);
+  await page.locator('#companion-restore').click();
+  await page.locator('#companion-toggle').click();
+  await page.locator('#companion-pause').click();
+  await expect(page.locator('#companion-pause')).toHaveText('Resume research everywhere');
+  expect(actions).toEqual(['settings']);
+  await expect(page.locator('#companion-dock')).toBeVisible();
 });
 
 test('chat failures retain the message and requests can be stopped', async ({page,appURL}) => {
@@ -180,29 +139,20 @@ test('chat failures retain the message and requests can be stopped', async ({pag
   await expect(page.locator('#companion-send')).toBeEnabled();
 });
 
-test('chat interrupts background research without losing pending findings', async ({page,appURL}) => {
-  let researching = false, chats = 0;
-  const state = {messages:[] as {id:string;role:string;text:string}[],pending:[{text:'Already collected',foundAt:Date.now(),sources:[{title:'Source',url:'https://example.com/'}]}],enabled:true,next:Date.now()+3_600_000,researchNext:0,seen:''};
-  await page.route('**/companion', async route => {
-    const body = route.request().postDataJSON();
-    if (body?.action === 'research') { researching = true; state.researchNext = Date.now()+3_600_000; return; }
-    if (body?.action === 'chat') {
-      chats++;
-      if (chats === 1) { await route.fulfill({status:409,body:'Sanjana is already thinking.'}); return; }
-      state.messages.push({id:'1',role:'user',text:body.message},{id:'2',role:'assistant',text:'Here is more about that finding.'});
-    }
-    if (body?.action === 'seen') state.seen = body.seen;
-    await route.fulfill({json:state});
-  });
-  await page.goto(appURL);
-  await expect.poll(() => researching).toBe(true);
-  await page.locator('#companion-toggle').click();
-  await expect(page.locator('#companion-research')).toContainText('Already collected');
-  await expect(page.locator('#companion-research-status')).toHaveText('Researching…');
-  await page.locator('#companion-input').fill('Tell me about this finding');
-  await page.locator('#companion-send').click();
-  await expect(page.getByRole('log')).toContainText('Here is more about that finding.');
-  await expect(page.locator('#companion-research')).toContainText('Already collected');
-  expect(chats).toBe(2);
-  await expect(page.locator('#companion-input')).toHaveValue('');
+test('companion identity and research brief are user owned; stale saves keep the browser draft',async({page,appURL})=>{
+ const notebook={name:'Ada',profile:'An astronomy companion',instructions:'Track new telescope results',memory:'Remember earlier findings',timezone:'America/New_York',hour:20,avatar:'',revision:'original'};
+ const state={notebook,messages:[],pending:[],enabled:true,paused:false,seen:''};
+ await page.route('**/companion?*',route=>route.fulfill({json:{entries:[{seq:1,kind:'daily',foundAt:1,document:{text:'An older retained report',sources:[]}}],before:null}}));
+ await page.route('**/companion',route=>route.request().postDataJSON()?.action==='notebook'?route.fulfill({status:409,body:'Settings changed on another device'}):route.fulfill({json:state}));
+ await page.goto(appURL);await page.locator('#companion-toggle').click();
+ await expect(page.locator('.companion-name')).toHaveText('Ada');
+ await page.locator('#companion-notebook-open').click();
+ await expect(page.getByLabel('Research instructions',{exact:true})).toHaveValue(notebook.instructions);
+ await expect(page.locator('#companion-history')).toContainText('An older retained report');
+ await page.getByLabel('Research instructions',{exact:true}).fill('Follow ocean research instead');
+ await page.getByRole('button',{name:'Save companion',exact:true}).click();
+ await expect(page.locator('#companion-notebook-status')).toContainText('changed on another device');
+ await page.reload();await page.locator('#companion-toggle').click();await page.locator('#companion-notebook-open').click();
+ await expect(page.getByLabel('Research instructions',{exact:true})).toHaveValue('Follow ocean research instead');
+ await expect(page.locator('#companion-notebook-status')).toContainText('Recovered browser draft');
 });

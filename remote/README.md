@@ -13,6 +13,14 @@ JaDE's **Mac files** tab edits UTF-8 text/source files in explicitly enabled Mac
 - Reload and export are available in the editor's menu. **Save as a new file** preserves a conflicting draft separately.
 - The folder selector grants access to that actual working copy. To isolate repo work, select a separate Git worktree. This release does not automatically make a worktree, execute commands, or perform Git operations.
 
+## Using the same files as Obsidian
+
+On desktop, choose **Projects** and open the exact vault folder shown by Obsidian (for this installation, `~/Documents/first`). The installed editor initially opens `~/JaDE Mobile`, which contains the separate **Notes** workspace. Opening the vault in Projects edits the actual vault files; it does not copy them or enable Cloud projects.
+
+If the vault uses **Obsidian Sync**, keep Obsidian running on the Mac and wait for **Fully synced** after phone edits. JaDE reads local files; its Mac connection does not run Obsidian's sync client. Opening only JaDE can therefore show an older local vault while newer edits remain in Obsidian Sync. Check Obsidian's activity log for failed transfers or automatic conflict merges.
+
+The desktop editor checks the open file for disk changes every two seconds while visible and on focus. Unedited text refreshes automatically; competing edits remain protected by a conflict notice. On iPhone, **Mac files** keeps local drafts and uses explicit reload/save actions. Export a draft you want to keep before replacing it with the Mac version.
+
 Folders can be listed or revoked locally:
 
 ```sh
@@ -59,3 +67,13 @@ The optional `LIVE_REMOTE_TEST` Xcode UI test uses an explicitly enabled isolate
 ## Optional persistent cloud projects
 
 The updated helper's **Cloud projects** menu separately opts selected folders into persistent Cloudflare storage. See [the project protocol and delivery contract](../sync/cloudflare/PROJECTS.md). This does not change direct **Save to Mac** or automatically upload `first` or other enabled folders. The phone entry point is **Mac files → Cloud projects**.
+
+## Mobile Sanjana
+
+The bridge permits a bounded `companion` request alongside file operations. It forwards only GET or allowlisted JSON actions to the fixed local `http://127.0.0.1:7339/companion` endpoint. Phone requests cannot select a URL, command, working directory, or model credentials. Chat/research run in a bounded separate worker pool so file requests keep moving. A durable receipt is reserved before forwarding; a helper interruption returns an uncertain outcome instead of replaying the model request. Completed results are delivered even after the relay's initial pickup deadline, and the phone polls long enough for the desktop's three-minute chat limit. Existing one-hour relay cleanup remains; conversation history itself remains in the desktop companion store.
+
+## September 2026 companion foundation
+
+Daily research now has a dedicated cloud runtime, shared configurable notebook and permanent research archive; see [research setup and limits](../sync/cloudflare/RESEARCH.md). The older Mac relay description above applies to interactive chat only. Server-scheduled research does not depend on the relay or an awake Mac.
+
+The editor shows whether a selected helper folder has cloud sync enabled and the helper's last check. A local save and a phone delivery receipt remain separate. Cloud project sync currently supports eligible text files, not attachment sync, deletion or renaming. Do not enable two independent sync services on the same vault expecting their conflict policies to coordinate; choose the intended primary path and verify both devices before retiring the old service.

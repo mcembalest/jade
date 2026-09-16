@@ -1,6 +1,27 @@
 import XCTest
 
 final class JaDEUITests: XCTestCase {
+    func testSanjanaUpdatesWithoutChat() throws {
+        let app=XCUIApplication()
+        app.launchEnvironment["JADE_OFFLINE_UI_TEST"]="1"
+        app.launchEnvironment["JADE_UI_TEST_ID"]=UUID().uuidString
+        app.launchEnvironment["JADE_SANJANA_FIXTURE"]="""
+        {"enabled":true,"paused":false,"messages":[{"id":"desktop","role":"assistant","text":"A little company, wherever you are.","proactive":true}],"pending":[{"text":"A discovery saved in Cloudflare","sources":[{"title":"Read the original","url":"https://example.com"}]}]}
+        """
+        app.launch();app.tabBars.buttons["Sanjana"].tap()
+        XCTAssertTrue(app.staticTexts["Sanjana’s corner"].waitForExistence(timeout:5))
+        XCTAssertTrue(app.staticTexts["A little company, wherever you are."].exists)
+        let shot=XCTAttachment(screenshot:app.screenshot());shot.name="Sanjana on iPhone";shot.lifetime = .keepAlways;add(shot)
+        app.swipeUp()
+        XCTAssertFalse(app.descendants(matching:.any).matching(identifier:"Message Sanjana").firstMatch.exists)
+        XCTAssertFalse(app.buttons["Send to Sanjana"].exists)
+        XCTAssertFalse(app.buttons["Look for discoveries"].exists)
+        XCTAssertTrue(app.staticTexts["Updates from Sanjana"].exists)
+        app.terminate();app.launch();app.tabBars.buttons["Sanjana"].tap()
+        XCTAssertTrue(app.staticTexts["A little company, wherever you are."].waitForExistence(timeout:5))
+        app.tabBars.buttons["Notes"].tap();XCTAssertTrue(app.navigationBars["JaDE"].exists)
+        app.tabBars.buttons["Mac files"].tap();XCTAssertTrue(app.buttons["Cloud projects · available with Mac off"].exists)
+    }
     @MainActor func testBulkDownloadAndConflictResolution() async throws {
         #if LOCAL_CLOUD_TEST
         let project="ui-"+UUID().uuidString
